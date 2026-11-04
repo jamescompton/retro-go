@@ -70,6 +70,14 @@ typedef struct
     int level;  // 0-1
 } rg_keymap_serial_t;
 
+// #define RG_GAMEPAD_TOUCH_MAP {{}, ...} to use an FT6336 touch panel as buttons.
+// Zones are in screen coordinates (after RG_TOUCH_TRANSFORM) and the box is inclusive.
+typedef struct
+{
+    rg_key_t key;
+    int x0, y0, x1, y1;
+} rg_keymap_touch_t;
+
 // #define RG_GAMEPAD_VIRT_MAP {{}, ...} to add virtual buttons (eg start+select = menu)
 typedef struct
 {
@@ -96,5 +104,6 @@ bool rg_input_wait_for_key(rg_key_t mask, bool pressed, int timeout_ms);
 uint32_t rg_input_read_gamepad(void);
 rg_battery_t rg_input_read_battery(void);
 bool rg_input_read_gamepad_raw(uint32_t *out);
+bool rg_input_touch_overlay_line(int y, uint16_t *line_be, int x0, int width);
 bool rg_input_read_battery_raw(rg_battery_t *out);
 const char *rg_input_get_key_name(rg_key_t key);

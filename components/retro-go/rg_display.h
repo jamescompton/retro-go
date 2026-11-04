@@ -124,5 +124,7 @@ void rg_display_set_backlight(display_backlight_t percent);
 display_backlight_t rg_display_get_backlight(void);
 void rg_display_set_border(const char *filename);
 char *rg_display_get_border(void);
+void rg_display_set_touch_overlay(bool enable);
+bool rg_display_get_touch_overlay(void);
 void rg_display_set_custom_zoom(double factor);
 double rg_display_get_custom_zoom(void);

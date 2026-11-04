@@ -15,6 +15,7 @@ static rg_display_t display;
 static int16_t map_viewport_to_source_x[RG_SCREEN_WIDTH + 1];
 static int16_t map_viewport_to_source_y[RG_SCREEN_HEIGHT + 1];
 static uint32_t screen_line_checksum[RG_SCREEN_HEIGHT + 1];
+static bool touch_overlay = false;
 
 #define LINE_IS_REPEATED(Y) (map_viewport_to_source_y[(Y)] == map_viewport_to_source_y[(Y) - 1])
 // This is to avoid flooring a number that is approximated to .9999999 and be explicit about it
@@ -26,6 +27,7 @@ static const char *SETTING_FILTER = "DispFilter";
 static const char *SETTING_ROTATION = "DispRotation";
 static const char *SETTING_BORDER = "DispBorder";
 static const char *SETTING_CUSTOM_ZOOM = "DispCustomZoom";
+static const char *SETTING_TOUCH_OVERLAY = "TouchOverlay";
 
 static void lcd_init(void);
 static void lcd_deinit(void);
@@ -227,6 +229,13 @@ static inline void write_update(const rg_surface_t *update)
             }
         }
 
+        if (need_update && touch_overlay)
+        {
+            const int line_top = draw_top + y - lines_to_copy;
+            for (int i = 0; i < lines_to_copy; ++i)
+                rg_input_touch_overlay_line(line_top + i, line_buffer + i * draw_width, draw_left, draw_width);
+        }
+
         if (need_update)
         {
             int left = display.screen.margins.left + draw_left;
@@ -364,6 +373,20 @@ static void display_task(void *arg)
                     rg_display_clear_except(display.viewport.left, display.viewport.top, display.viewport.width, display.viewport.height, C_BLACK);
             }
             display.changed = false;
+
+            // Margins are not covered by frame updates, so draw the touch overlay there too
+            if (touch_overlay && (display.viewport.width < display.screen.width || display.viewport.height < display.screen.height))
+            {
+                static uint16_t row[RG_SCREEN_WIDTH];
+                for (int y = 0; y < display.screen.height; ++y)
+                {
+                    memset(row, 0, sizeof(row));
+                    if (rg_input_touch_overlay_line(y, row, 0, display.screen.width))
+                        rg_display_write_rect(0, y, display.screen.width, 1, 0, row,
+                                              RG_DISPLAY_WRITE_NOSYNC | RG_DISPLAY_WRITE_NOSWAP);
+                }
+                memset(screen_line_checksum, 0, sizeof(screen_line_checksum));
+            }
         }
 
         write_update(msg.dataPtr);
@@ -485,6 +508,18 @@ void rg_display_set_border(const char *filename)
 char *rg_display_get_border(void)
 {
     return rg_settings_get_string(NS_APP, SETTING_BORDER, NULL);
+}
+
+void rg_display_set_touch_overlay(bool enable)
+{
+    touch_overlay = enable;
+    rg_settings_set_boolean(NS_GLOBAL, SETTING_TOUCH_OVERLAY, enable);
+    display.changed = true;
+}
+
+bool rg_display_get_touch_overlay(void)
+{
+    return touch_overlay;
 }
 
 void rg_display_submit(const rg_surface_t *update, uint32_t flags)
@@ -632,6 +667,9 @@ void rg_display_init(void)
         .border_file = rg_settings_get_string(NS_APP, SETTING_BORDER, NULL),
         .custom_zoom = rg_settings_get_number(NS_APP, SETTING_CUSTOM_ZOOM, 1.0),
     };
+#ifdef RG_GAMEPAD_TOUCH_MAP
+    touch_overlay = rg_settings_get_boolean(NS_GLOBAL, SETTING_TOUCH_OVERLAY, true);
+#endif
     display = (rg_display_t){
         .screen.real_width = RG_SCREEN_WIDTH,
         .screen.real_height = RG_SCREEN_HEIGHT,

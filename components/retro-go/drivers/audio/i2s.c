@@ -20,6 +20,37 @@
 #define MUTE_DISABLE 1
 #endif
 
+#ifdef RG_AUDIO_CODEC_ES8311
+#include "rg_i2c.h"
+
+// Slave mode, MCLK = 256 * fs from the MCLK pin, 16-bit I2S, DAC only.
+static bool es8311_init(void)
+{
+    static const uint8_t seq[][2] = {
+        {0x44, 0x08}, {0x44, 0x08},
+        {0x01, 0x30}, {0x02, 0x00}, {0x03, 0x10}, {0x16, 0x24}, {0x04, 0x10}, {0x05, 0x00},
+        {0x0B, 0x00}, {0x0C, 0x00}, {0x10, 0x1F}, {0x11, 0x7F}, {0x00, 0x80},
+        {0x01, 0x3F},
+        {0x02, 0x00}, {0x03, 0x10}, {0x04, 0x10}, {0x05, 0x00},
+        {0x06, 0x03}, {0x07, 0x00}, {0x08, 0xFF},
+        {0x09, 0x0C}, {0x0A, 0x0C},
+        {0x0D, 0x01}, {0x0E, 0x02}, {0x12, 0x00}, {0x13, 0x10}, {0x14, 0x1A},
+        {0x1C, 0x6A}, {0x37, 0x08},
+        {0x31, 0x00}, {0x32, 0xBF},
+    };
+    if (!rg_i2c_init())
+        return false;
+    RG_LOGI("ES8311 chip id: %02X%02X\n", rg_i2c_read_byte(RG_AUDIO_CODEC_ES8311, 0xFD),
+            rg_i2c_read_byte(RG_AUDIO_CODEC_ES8311, 0xFE));
+    for (size_t i = 0; i < RG_COUNT(seq); ++i)
+    {
+        if (!rg_i2c_write_byte(RG_AUDIO_CODEC_ES8311, seq[i][0], seq[i][1]))
+            return false;
+    }
+    return true;
+}
+#endif
+
 // We can safely assume that no application will submit more than 640 audio frames per call to
 // driver_submit (32000/50). Using a single large buffer risks blocking the call needlessly because
 // some apps submit more than once per cycle or there could be occasional jitter (early submission).
@@ -78,7 +109,11 @@ static bool driver_init(int device, int sample_rate)
         if (ret == ESP_OK)
         {
             ret = i2s_set_pin(I2S_NUM_0, &(i2s_pin_config_t) {
+            #ifdef RG_GPIO_SND_I2S_MCLK
+                .mck_io_num = RG_GPIO_SND_I2S_MCLK,
+            #else
                 .mck_io_num = GPIO_NUM_NC,
+            #endif
                 .bck_io_num = RG_GPIO_SND_I2S_BCK,
                 .ws_io_num = RG_GPIO_SND_I2S_WS,
                 .data_out_num = RG_GPIO_SND_I2S_DATA,
@@ -87,6 +122,10 @@ static bool driver_init(int device, int sample_rate)
         }
         if (ret != ESP_OK)
             state.last_error = esp_err_to_name(ret);
+    #ifdef RG_AUDIO_CODEC_ES8311
+        else if (!es8311_init())
+            state.last_error = "ES8311 codec not responding";
+    #endif
     #else
         state.last_error = "This device does not support external DAC mode!";
     #endif
@@ -167,6 +206,10 @@ static bool driver_submit(const rg_audio_frame_t *frames, size_t count)
             }
         #endif
         }
+
+    #ifdef RG_AUDIO_CODEC_ES8311
+        left = right = (left + right) >> 1; // The codec drives a single mono speaker
+    #endif
 
         // Clipping   (not necessary, we have (int16 * vol) and volume is never more than 1.0)
         // if (left > 32767) left = 32767; else if (left < -32768) left = -32767;

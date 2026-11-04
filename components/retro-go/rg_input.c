@@ -1,4 +1,5 @@
 #include "rg_system.h"
+#include "rg_ble.h"
 #include "rg_input.h"
 
 #include <stdlib.h>
@@ -34,6 +35,9 @@ static rg_keymap_kbd_t keymap_kbd[] = RG_GAMEPAD_KBD_MAP;
 #endif
 #ifdef RG_GAMEPAD_SERIAL_MAP
 static rg_keymap_serial_t keymap_serial[] = RG_GAMEPAD_SERIAL_MAP;
+#endif
+#ifdef RG_GAMEPAD_TOUCH_MAP
+static rg_keymap_touch_t keymap_touch[] = RG_GAMEPAD_TOUCH_MAP;
 #endif
 #ifdef RG_GAMEPAD_VIRT_MAP
 static rg_keymap_virt_t keymap_virt[] = RG_GAMEPAD_VIRT_MAP;
@@ -101,6 +105,48 @@ bool rg_input_read_battery_raw(rg_battery_t *out)
         .charging = charging,
     };
     return true;
+}
+
+bool rg_input_touch_overlay_line(int y, uint16_t *line_be, int x0, int width)
+{
+    bool drawn = false;
+#ifdef RG_GAMEPAD_TOUCH_MAP
+    for (size_t i = 0; i < RG_COUNT(keymap_touch); ++i)
+    {
+        const rg_keymap_touch_t *m = &keymap_touch[i];
+        const int l = m->x0 + 3, r = m->x1 - 3, t = m->y0 + 3, b = m->y1 - 3;
+        if (y < t || y > b)
+            continue;
+
+        uint16_t c;
+        switch (m->key)
+        {
+            case RG_KEY_A:      c = 0xF800; break; // red
+            case RG_KEY_B:      c = 0xFFE0; break; // yellow
+            case RG_KEY_START:
+            case RG_KEY_SELECT: c = 0x07FF; break; // cyan
+            case RG_KEY_MENU:
+            case RG_KEY_OPTION: c = 0x07E0; break; // green
+            default:            c = 0xFFFF; break; // d-pad: white
+        }
+        c = (c << 8) | (c >> 8);
+
+        if (y == t || y == b)
+        {
+            for (int x = RG_MAX(l, x0); x <= RG_MIN(r, x0 + width - 1); ++x)
+                line_be[x - x0] = c;
+        }
+        else
+        {
+            if (l >= x0 && l < x0 + width)
+                line_be[l - x0] = c;
+            if (r >= x0 && r < x0 + width)
+                line_be[r - x0] = c;
+        }
+        drawn = true;
+    }
+#endif
+    return drawn;
 }
 
 bool rg_input_read_gamepad_raw(uint32_t *out)
@@ -197,6 +243,35 @@ bool rg_input_read_gamepad_raw(uint32_t *out)
         if (((buttons >> mapping->num) & 1) == mapping->level)
             state |= mapping->key;
     }
+#endif
+
+#if defined(RG_GAMEPAD_TOUCH_MAP)
+    {
+        // FT6336: reg 0x02 = touch count, then 6 bytes per point (XH, XL, YH, YL, weight, area)
+        uint8_t td[13];
+        if (rg_i2c_read(0x38, 0x02, td, sizeof(td)))
+        {
+            int points = RG_MIN(td[0] & 0x0F, 2);
+            for (int p = 0; p < points; ++p)
+            {
+                const uint8_t *pt = &td[1 + p * 6];
+                int raw_x = ((pt[0] & 0x0F) << 8) | pt[1];
+                int raw_y = ((pt[2] & 0x0F) << 8) | pt[3];
+                int x, y;
+                RG_TOUCH_TRANSFORM(raw_x, raw_y, x, y);
+                for (size_t i = 0; i < RG_COUNT(keymap_touch); ++i)
+                {
+                    const rg_keymap_touch_t *m = &keymap_touch[i];
+                    if (x >= m->x0 && x <= m->x1 && y >= m->y0 && y <= m->y1)
+                        state |= m->key;
+                }
+            }
+        }
+    }
+#endif
+
+#if defined(RG_ENABLE_BLE_GAMEPAD)
+    state |= rg_ble_gamepad_state();
 #endif
 
 #if defined(RG_GAMEPAD_VIRT_MAP)
@@ -317,6 +392,27 @@ void rg_input_init(void)
     rg_i2c_write_byte(T_DECK_KBD_ADDRESS, -1, T_DECK_KBD_MODE_RAW_CMD);
 #endif
     UPDATE_GLOBAL_MAP(keymap_i2c);
+#endif
+
+#if defined(RG_GAMEPAD_TOUCH_MAP)
+    RG_LOGI("Initializing touch gamepad driver...");
+#ifdef RG_GPIO_TOUCH_RST
+    gpio_reset_pin(RG_GPIO_TOUCH_RST);
+    gpio_set_direction(RG_GPIO_TOUCH_RST, GPIO_MODE_OUTPUT);
+    gpio_set_level(RG_GPIO_TOUCH_RST, 0);
+    rg_usleep(10000);
+    gpio_set_level(RG_GPIO_TOUCH_RST, 1);
+    rg_usleep(100000);
+#endif
+    rg_i2c_init();
+    UPDATE_GLOBAL_MAP(keymap_touch);
+#endif
+
+#if defined(RG_ENABLE_BLE_GAMEPAD)
+    RG_LOGI("Initializing BLE gamepad driver...");
+    gamepad_mapped |= RG_KEY_UP | RG_KEY_DOWN | RG_KEY_LEFT | RG_KEY_RIGHT | RG_KEY_A | RG_KEY_B |
+                      RG_KEY_START | RG_KEY_SELECT | RG_KEY_MENU | RG_KEY_OPTION;
+    rg_ble_init();
 #endif
 
 #if defined(RG_GAMEPAD_KBD_MAP)

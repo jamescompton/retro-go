@@ -1,6 +1,10 @@
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/components")
 
+if(RG_BUILD_TARGET STREQUAL "RG_TARGET_ES3C28P")
+    set(COMPONENTS "${COMPONENTS} bt esp_hid")
+endif()
+
 macro(rg_setup_compile_options)
     component_compile_options(
         -D${RG_BUILD_TARGET}=1

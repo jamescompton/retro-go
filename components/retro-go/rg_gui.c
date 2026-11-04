@@ -2012,6 +2012,19 @@ static rg_gui_event_t app_options_cb(rg_gui_option_t *option, rg_gui_event_t eve
     return RG_DIALOG_VOID;
 }
 
+#ifdef RG_GAMEPAD_TOUCH_MAP
+static rg_gui_event_t touch_overlay_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (event == RG_DIALOG_PREV || event == RG_DIALOG_NEXT || event == RG_DIALOG_ENTER)
+    {
+        rg_display_set_touch_overlay(!rg_display_get_touch_overlay());
+        return RG_DIALOG_REDRAW;
+    }
+    strcpy(option->value, rg_display_get_touch_overlay() ? _("On") : _("Off"));
+    return RG_DIALOG_VOID;
+}
+#endif
+
 void rg_gui_options_menu(void)
 {
     rg_gui_option_t options[20] = {
@@ -2043,6 +2056,9 @@ void rg_gui_options_menu(void)
         {0, _("Filter"),        "-", RG_DIALOG_FLAG_NORMAL, &filter_update_cb},
         {0, _("Border"),        "-", RG_DIALOG_FLAG_NORMAL, &border_update_cb},
         {0, _("Speed"),         "-", RG_DIALOG_FLAG_NORMAL, &speedup_update_cb},
+        #ifdef RG_GAMEPAD_TOUCH_MAP
+        {0, _("Touch buttons"), "-", RG_DIALOG_FLAG_NORMAL, &touch_overlay_cb},
+        #endif
         // {0, _("Misc options"),  NULL, RG_DIALOG_FLAG_NORMAL, &misc_options_cb},
         #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3 // && !RG_BUILD_RELEASE
         {0, _("Overclock"),     "-", RG_DIALOG_FLAG_NORMAL, &overclock_cb},
