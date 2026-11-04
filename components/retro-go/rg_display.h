@@ -126,5 +126,8 @@ void rg_display_set_border(const char *filename);
 char *rg_display_get_border(void);
 void rg_display_set_touch_overlay(bool enable);
 bool rg_display_get_touch_overlay(void);
+void rg_display_set_touch_style(int color, int opacity);
+int rg_display_get_touch_color(void);
+int rg_display_get_touch_opacity(void);
 void rg_display_set_custom_zoom(double factor);
 double rg_display_get_custom_zoom(void);

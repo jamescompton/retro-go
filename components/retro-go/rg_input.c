@@ -107,10 +107,31 @@ bool rg_input_read_battery_raw(rg_battery_t *out)
     return true;
 }
 
+static const uint16_t overlay_colors[] = {0, 0xFFFF, 0xF800, 0x07E0, 0x001F, 0xFFE0, 0x07FF, 0xF81F}; // 0 = per-button colours
+static const uint8_t overlay_alphas[] = {64, 128, 192, 255};
+static int overlay_color = 0, overlay_opacity = 3;
+
+void rg_input_set_touch_overlay_style(int color, int opacity)
+{
+    overlay_color = RG_MIN(RG_MAX(color, 0), (int)RG_COUNT(overlay_colors) - 1);
+    overlay_opacity = RG_MIN(RG_MAX(opacity, 0), (int)RG_COUNT(overlay_alphas) - 1);
+}
+
+static inline uint16_t overlay_blend(uint16_t px_be, uint16_t c, uint8_t a)
+{
+    const uint16_t px = (px_be << 8) | (px_be >> 8);
+    const int r = (((c >> 11) & 31) * a + ((px >> 11) & 31) * (255 - a)) / 255;
+    const int g = (((c >> 5) & 63) * a + ((px >> 5) & 63) * (255 - a)) / 255;
+    const int b = ((c & 31) * a + (px & 31) * (255 - a)) / 255;
+    const uint16_t out = (r << 11) | (g << 5) | b;
+    return (out << 8) | (out >> 8);
+}
+
 bool rg_input_touch_overlay_line(int y, uint16_t *line_be, int x0, int width)
 {
     bool drawn = false;
 #ifdef RG_GAMEPAD_TOUCH_MAP
+    const uint8_t alpha = overlay_alphas[overlay_opacity];
     for (size_t i = 0; i < RG_COUNT(keymap_touch); ++i)
     {
         const rg_keymap_touch_t *m = &keymap_touch[i];
@@ -118,30 +139,32 @@ bool rg_input_touch_overlay_line(int y, uint16_t *line_be, int x0, int width)
         if (y < t || y > b)
             continue;
 
-        uint16_t c;
-        switch (m->key)
+        uint16_t c = overlay_colors[overlay_color];
+        if (!c)
         {
-            case RG_KEY_A:      c = 0xF800; break; // red
-            case RG_KEY_B:      c = 0xFFE0; break; // yellow
-            case RG_KEY_START:
-            case RG_KEY_SELECT: c = 0x07FF; break; // cyan
-            case RG_KEY_MENU:
-            case RG_KEY_OPTION: c = 0x07E0; break; // green
-            default:            c = 0xFFFF; break; // d-pad: white
+            switch (m->key)
+            {
+                case RG_KEY_A:      c = 0xF800; break; // red
+                case RG_KEY_B:      c = 0xFFE0; break; // yellow
+                case RG_KEY_START:
+                case RG_KEY_SELECT: c = 0x07FF; break; // cyan
+                case RG_KEY_MENU:
+                case RG_KEY_OPTION: c = 0x07E0; break; // green
+                default:            c = 0xFFFF; break; // d-pad: white
+            }
         }
-        c = (c << 8) | (c >> 8);
 
         if (y == t || y == b)
         {
             for (int x = RG_MAX(l, x0); x <= RG_MIN(r, x0 + width - 1); ++x)
-                line_be[x - x0] = c;
+                line_be[x - x0] = overlay_blend(line_be[x - x0], c, alpha);
         }
         else
         {
             if (l >= x0 && l < x0 + width)
-                line_be[l - x0] = c;
+                line_be[l - x0] = overlay_blend(line_be[l - x0], c, alpha);
             if (r >= x0 && r < x0 + width)
-                line_be[r - x0] = c;
+                line_be[r - x0] = overlay_blend(line_be[r - x0], c, alpha);
         }
         drawn = true;
     }

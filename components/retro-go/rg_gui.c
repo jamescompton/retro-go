@@ -2023,6 +2023,36 @@ static rg_gui_event_t touch_overlay_cb(rg_gui_option_t *option, rg_gui_event_t e
     strcpy(option->value, rg_display_get_touch_overlay() ? _("On") : _("Off"));
     return RG_DIALOG_VOID;
 }
+
+static rg_gui_event_t touch_color_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    static const char *names[] = {"Multi", "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta"};
+    const int count = RG_COUNT(names);
+    int color = rg_display_get_touch_color();
+    if (event == RG_DIALOG_PREV || event == RG_DIALOG_NEXT || event == RG_DIALOG_ENTER)
+    {
+        color = (color + (event == RG_DIALOG_PREV ? count - 1 : 1)) % count;
+        rg_display_set_touch_style(color, rg_display_get_touch_opacity());
+        return RG_DIALOG_REDRAW;
+    }
+    strcpy(option->value, names[RG_MIN(RG_MAX(color, 0), count - 1)]);
+    return RG_DIALOG_VOID;
+}
+
+static rg_gui_event_t touch_opacity_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    static const char *names[] = {"25%", "50%", "75%", "100%"};
+    const int count = RG_COUNT(names);
+    int opacity = rg_display_get_touch_opacity();
+    if (event == RG_DIALOG_PREV || event == RG_DIALOG_NEXT || event == RG_DIALOG_ENTER)
+    {
+        opacity = (opacity + (event == RG_DIALOG_PREV ? count - 1 : 1)) % count;
+        rg_display_set_touch_style(rg_display_get_touch_color(), opacity);
+        return RG_DIALOG_REDRAW;
+    }
+    strcpy(option->value, names[RG_MIN(RG_MAX(opacity, 0), count - 1)]);
+    return RG_DIALOG_VOID;
+}
 #endif
 
 void rg_gui_options_menu(void)
@@ -2041,6 +2071,11 @@ void rg_gui_options_menu(void)
         {0, _("Show clock"),    "-", RG_DIALOG_FLAG_NORMAL, &show_clock_cb},
         {0, _("Timezone"),      "-", RG_DIALOG_FLAG_NORMAL, &timezone_cb},
         {0, _("Language"),      "-", RG_DIALOG_FLAG_NORMAL, &language_cb},
+        #ifdef RG_GAMEPAD_TOUCH_MAP
+        {0, _("Touch buttons"), "-", RG_DIALOG_FLAG_NORMAL, &touch_overlay_cb},
+        {0, _("Touch colour"),  "-", RG_DIALOG_FLAG_NORMAL, &touch_color_cb},
+        {0, _("Touch opacity"), "-", RG_DIALOG_FLAG_NORMAL, &touch_opacity_cb},
+        #endif
         #ifdef RG_GPIO_LED // Only show disk LED option if disk LED GPIO pin is defined
         {0, _("LED options"),   NULL, RG_DIALOG_FLAG_NORMAL, &led_indicator_cb},
         #endif
@@ -2058,6 +2093,8 @@ void rg_gui_options_menu(void)
         {0, _("Speed"),         "-", RG_DIALOG_FLAG_NORMAL, &speedup_update_cb},
         #ifdef RG_GAMEPAD_TOUCH_MAP
         {0, _("Touch buttons"), "-", RG_DIALOG_FLAG_NORMAL, &touch_overlay_cb},
+        {0, _("Touch colour"),  "-", RG_DIALOG_FLAG_NORMAL, &touch_color_cb},
+        {0, _("Touch opacity"), "-", RG_DIALOG_FLAG_NORMAL, &touch_opacity_cb},
         #endif
         // {0, _("Misc options"),  NULL, RG_DIALOG_FLAG_NORMAL, &misc_options_cb},
         #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3 // && !RG_BUILD_RELEASE

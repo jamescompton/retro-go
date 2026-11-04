@@ -105,5 +105,6 @@ uint32_t rg_input_read_gamepad(void);
 rg_battery_t rg_input_read_battery(void);
 bool rg_input_read_gamepad_raw(uint32_t *out);
 bool rg_input_touch_overlay_line(int y, uint16_t *line_be, int x0, int width);
+void rg_input_set_touch_overlay_style(int color, int opacity);
 bool rg_input_read_battery_raw(rg_battery_t *out);
 const char *rg_input_get_key_name(rg_key_t key);

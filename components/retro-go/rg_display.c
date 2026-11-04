@@ -28,6 +28,8 @@ static const char *SETTING_ROTATION = "DispRotation";
 static const char *SETTING_BORDER = "DispBorder";
 static const char *SETTING_CUSTOM_ZOOM = "DispCustomZoom";
 static const char *SETTING_TOUCH_OVERLAY = "TouchOverlay";
+static const char *SETTING_TOUCH_COLOR = "TouchColor";
+static const char *SETTING_TOUCH_OPACITY = "TouchOpacity";
 
 static void lcd_init(void);
 static void lcd_deinit(void);
@@ -522,6 +524,24 @@ bool rg_display_get_touch_overlay(void)
     return touch_overlay;
 }
 
+void rg_display_set_touch_style(int color, int opacity)
+{
+    rg_settings_set_number(NS_GLOBAL, SETTING_TOUCH_COLOR, color);
+    rg_settings_set_number(NS_GLOBAL, SETTING_TOUCH_OPACITY, opacity);
+    rg_input_set_touch_overlay_style(color, opacity);
+    display.changed = true;
+}
+
+int rg_display_get_touch_color(void)
+{
+    return rg_settings_get_number(NS_GLOBAL, SETTING_TOUCH_COLOR, 0);
+}
+
+int rg_display_get_touch_opacity(void)
+{
+    return rg_settings_get_number(NS_GLOBAL, SETTING_TOUCH_OPACITY, 3);
+}
+
 void rg_display_submit(const rg_surface_t *update, uint32_t flags)
 {
     const int64_t time_start = rg_system_timer();
@@ -669,6 +689,8 @@ void rg_display_init(void)
     };
 #ifdef RG_GAMEPAD_TOUCH_MAP
     touch_overlay = rg_settings_get_boolean(NS_GLOBAL, SETTING_TOUCH_OVERLAY, true);
+    rg_input_set_touch_overlay_style(rg_settings_get_number(NS_GLOBAL, SETTING_TOUCH_COLOR, 0),
+                                     rg_settings_get_number(NS_GLOBAL, SETTING_TOUCH_OPACITY, 3));
 #endif
     display = (rg_display_t){
         .screen.real_width = RG_SCREEN_WIDTH,
