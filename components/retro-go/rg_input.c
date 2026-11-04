@@ -127,6 +127,56 @@ static inline uint16_t overlay_blend(uint16_t px_be, uint16_t c, uint8_t a)
     return (out << 8) | (out >> 8);
 }
 
+static bool overlay_labels = false;
+
+void rg_input_set_touch_overlay_labels(bool enable)
+{
+    overlay_labels = enable;
+}
+
+// 5x7 glyphs, one byte per row (5 bits, MSB = left)
+static const uint8_t *overlay_glyph(char ch)
+{
+    static const uint8_t glyphs[][7] = {
+        {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}, // A
+        {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}, // B
+        {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}, // E
+        {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}, // L
+        {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}, // M
+        {0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11}, // N
+        {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}, // O
+        {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}, // P
+        {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E}, // S
+        {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}, // T
+        {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}, // U
+        {0x04, 0x0E, 0x15, 0x04, 0x04, 0x04, 0x04}, // ^
+        {0x04, 0x04, 0x04, 0x04, 0x15, 0x0E, 0x04}, // v
+        {0x00, 0x04, 0x08, 0x1F, 0x08, 0x04, 0x00}, // <
+        {0x00, 0x04, 0x02, 0x1F, 0x02, 0x04, 0x00}, // >
+    };
+    static const char order[] = "ABELMNOPSTU^v<>";
+    const char *p = strchr(order, ch);
+    return p ? glyphs[p - order] : NULL;
+}
+
+static const char *overlay_label(uint32_t key)
+{
+    switch (key)
+    {
+        case RG_KEY_UP:     return "^";
+        case RG_KEY_DOWN:   return "v";
+        case RG_KEY_LEFT:   return "<";
+        case RG_KEY_RIGHT:  return ">";
+        case RG_KEY_A:      return "A";
+        case RG_KEY_B:      return "B";
+        case RG_KEY_START:  return "STA";
+        case RG_KEY_SELECT: return "SEL";
+        case RG_KEY_MENU:   return "MENU";
+        case RG_KEY_OPTION: return "OPT";
+        default:            return "";
+    }
+}
+
 bool rg_input_touch_overlay_line(int y, uint16_t *line_be, int x0, int width)
 {
     bool drawn = false;
@@ -151,6 +201,35 @@ bool rg_input_touch_overlay_line(int y, uint16_t *line_be, int x0, int width)
                 case RG_KEY_MENU:
                 case RG_KEY_OPTION: c = 0x07E0; break; // green
                 default:            c = 0xFFFF; break; // d-pad: white
+            }
+        }
+
+        if (overlay_labels)
+        {
+            const char *label = overlay_label(m->key);
+            const int len = strlen(label);
+            const int ly = (m->y0 + m->y1) / 2 - 7; // 7 rows at 2x scale
+            if (len && y >= ly && y < ly + 14)
+            {
+                const int lx = (m->x0 + m->x1) / 2 - (len * 12 - 2) / 2;
+                for (int n = 0; n < len; ++n)
+                {
+                    const uint8_t *g = overlay_glyph(label[n]);
+                    if (!g)
+                        continue;
+                    const uint8_t row = g[(y - ly) / 2];
+                    for (int col = 0; col < 5; ++col)
+                    {
+                        if (!(row & (0x10 >> col)))
+                            continue;
+                        for (int px = 0; px < 2; ++px)
+                        {
+                            const int x = lx + n * 12 + col * 2 + px;
+                            if (x >= x0 && x < x0 + width)
+                                line_be[x - x0] = overlay_blend(line_be[x - x0], c, alpha);
+                        }
+                    }
+                }
             }
         }
 
