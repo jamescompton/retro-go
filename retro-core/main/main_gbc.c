@@ -18,6 +18,9 @@ static bool loadBIOSFile = false;
 static rg_app_t *app;
 static rg_surface_t *updates[2];
 static rg_surface_t *currentUpdate;
+#if RG_GBC_SKIP_BUSY_VIDEO
+static rg_surface_t *lastSubmittedUpdate;
+#endif
 
 static const char *SETTING_SAVESRAM = "SaveSRAM";
 static const char *SETTING_PALETTE  = "Palette";
@@ -40,6 +43,9 @@ static void event_handler(int event, void *arg)
     if (event == RG_EVENT_REDRAW)
     {
         rg_display_submit(currentUpdate, 0);
+        #if RG_GBC_SKIP_BUSY_VIDEO
+        lastSubmittedUpdate = currentUpdate;
+        #endif
     }
 }
 
@@ -220,7 +226,15 @@ static void video_callback(void *buffer)
 {
     int64_t startTime = rg_system_timer();
     slowFrame = !rg_display_sync(false);
+    #if RG_GBC_SKIP_BUSY_VIDEO
+    if (!slowFrame)
+    {
+        rg_display_submit(currentUpdate, 0);
+        lastSubmittedUpdate = currentUpdate;
+    }
+    #else
     rg_display_submit(currentUpdate, 0);
+    #endif
     video_time += rg_system_timer() - startTime;
 }
 
@@ -352,7 +366,12 @@ void gbc_main(void)
 
         if (drawFrame)
         {
+            #if RG_GBC_SKIP_BUSY_VIDEO
+            // A dropped frame must reuse the unqueued buffer, not the one still being displayed.
+            currentUpdate = updates[lastSubmittedUpdate == updates[0]];
+            #else
             currentUpdate = updates[currentUpdate == updates[0]];
+            #endif
             gnuboy_set_framebuffer(currentUpdate->data);
         }
         gnuboy_run(drawFrame);

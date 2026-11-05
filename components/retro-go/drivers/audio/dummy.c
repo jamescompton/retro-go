@@ -17,8 +17,9 @@ static bool driver_deinit(void)
 static bool driver_submit(const rg_audio_frame_t *frames, size_t count)
 {
     // Wait until the previous submission is done "playing"
-    if (busyUntil > rg_system_timer())
-        rg_usleep(busyUntil - rg_system_timer());
+    int64_t remaining = busyUntil - rg_system_timer();
+    if (remaining > 0)
+        rg_task_delay((remaining + 999) / 1000);
     busyUntil = rg_system_timer() + (count * (1000000.f / rg_audio_get_sample_rate()));
     return true;
 }

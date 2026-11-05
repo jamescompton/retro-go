@@ -1,5 +1,7 @@
 #include "rg_system.h"
 #include "rg_input.h"
+#include "rg_ble.h"
+#include "rg_touch.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +43,9 @@ static rg_keymap_virt_t keymap_virt[] = RG_GAMEPAD_VIRT_MAP;
 static bool input_task_running = false;
 static uint32_t gamepad_state = -1; // _Atomic
 static uint32_t gamepad_mapped = 0;
+#if RG_MINI_JOYSTICK
+static uint32_t mini_joystick_state;
+#endif
 static rg_battery_t battery_state = {0};
 
 #define UPDATE_GLOBAL_MAP(keymap)                 \
@@ -207,10 +212,78 @@ bool rg_input_read_gamepad_raw(uint32_t *out)
     }
 #endif
 
+    state |= rg_ble_gamepad_state();
+    state |= rg_touch_read();
+#if RG_MINI_JOYSTICK
+    state |= mini_joystick_state;
+#endif
+
     if (out)
         *out = state;
     return true;
 }
+
+#if RG_MINI_JOYSTICK
+static uint32_t mini_joystick_decode(const uint8_t sample[7], uint32_t previous)
+{
+    const uint32_t keys[] = {RG_KEY_START, RG_KEY_B, RG_KEY_A, RG_KEY_SELECT, RG_KEY_MENU};
+    uint32_t state = previous;
+    for (size_t i = 0; i < RG_COUNT(keys); ++i)
+    {
+        switch (sample[i + 2])
+        {
+            case 0: case 2: case 5: case 6: state |= keys[i]; break;
+            case 1: case 3: case 4: state &= ~keys[i]; break;
+            case 8: break; // Idle event does not mean a held button was released.
+            default: state &= ~keys[i]; break;
+        }
+    }
+    const uint32_t negative[] = {RG_KEY_LEFT, RG_KEY_DOWN};
+    const uint32_t positive[] = {RG_KEY_RIGHT, RG_KEY_UP};
+    for (size_t i = 0; i < 2; ++i)
+    {
+        bool low = sample[i] < ((previous & negative[i]) ? 104 : 80);
+        bool high = sample[i] > ((previous & positive[i]) ? 152 : 176);
+        state &= ~(negative[i] | positive[i]);
+        if (low) state |= negative[i];
+        if (high) state |= positive[i];
+    }
+    return state;
+}
+
+static void mini_joystick_poll(void)
+{
+    static int64_t next_read;
+    if (rg_system_timer() < next_read)
+        return;
+
+    // NULLLAB Mini-Joystick: X/Y, then A/B/C/D/stick-click event registers.
+    const uint8_t registers[] = {0x10, 0x11, 0x22, 0x23, 0x21, 0x24, 0x20};
+    uint8_t sample[7];
+    for (size_t i = 0; i < RG_COUNT(registers); ++i)
+    {
+        if (!rg_i2c_read_timeout(0x5A, registers[i], &sample[i], 1, 50))
+        {
+            RG_LOGW("Mini-Joystick read failed; releasing controls and retrying in 1 second");
+            next_read = rg_system_timer() + 1000000;
+            mini_joystick_state = 0;
+            return;
+        }
+    }
+    for (size_t i = 2; i < RG_COUNT(sample); ++i)
+    {
+        if (sample[i] > 8 || sample[i] == 7)
+        {
+            RG_LOGE("Mini-Joystick invalid button event: register=0x%02x value=%u", registers[i], sample[i]);
+            mini_joystick_state = 0;
+            next_read = rg_system_timer() + 1000000;
+            return;
+        }
+    }
+    mini_joystick_state = mini_joystick_decode(sample, mini_joystick_state);
+    next_read = rg_system_timer() + 20000;
+}
+#endif
 
 static void input_task(void *arg)
 {
@@ -218,6 +291,10 @@ static void input_task(void *arg)
     uint32_t local_gamepad_state = 0;
     uint32_t state;
     int64_t next_battery_update = 0;
+    #ifdef RG_TOUCH_CS
+    int64_t boot_held_since = 0;
+    bool touch_recovered = false;
+    #endif
 
     // Start the task with debounce history full to allow a button held during boot to be detected
     memset(debounce, 0xFF, sizeof(debounce));
@@ -225,6 +302,25 @@ static void input_task(void *arg)
 
     while (input_task_running)
     {
+#if RG_MINI_JOYSTICK
+        mini_joystick_poll();
+#endif
+        #ifdef RG_TOUCH_CS
+        if (gpio_get_level(GPIO_NUM_0) == 0)
+        {
+            if (!boot_held_since) boot_held_since = rg_system_timer();
+            if (!touch_recovered && rg_system_timer() - boot_held_since >= 2000000)
+            {
+                rg_touch_recover();
+                touch_recovered = true;
+            }
+        }
+        else
+        {
+            boot_held_since = 0;
+            touch_recovered = false;
+        }
+        #endif
         if (rg_input_read_gamepad_raw(&state))
         {
             for (int i = 0; i < RG_KEY_COUNT; ++i)
@@ -269,6 +365,14 @@ void rg_input_init(void)
 {
     RG_ASSERT(!input_task_running, "Input already initialized!");
 
+#if RG_MINI_JOYSTICK
+    mini_joystick_state = 0;
+    if (!rg_i2c_init())
+        RG_LOGE("Mini-Joystick unavailable; Bluetooth and touch remain available");
+    gamepad_mapped |= RG_KEY_UP | RG_KEY_DOWN | RG_KEY_LEFT | RG_KEY_RIGHT |
+                      RG_KEY_A | RG_KEY_B | RG_KEY_SELECT | RG_KEY_START | RG_KEY_MENU;
+#endif
+
 #if defined(RG_GAMEPAD_ADC_MAP)
     RG_LOGI("Initializing ADC gamepad driver...");
     adc1_config_width(ADC_WIDTH_MAX - 1);
@@ -299,6 +403,10 @@ void rg_input_init(void)
             gpio_set_pull_mode(mapping->num, GPIO_FLOATING);
     }
     UPDATE_GLOBAL_MAP(keymap_gpio);
+#endif
+
+#ifdef RG_ENABLE_BLE_GAMEPAD
+    gamepad_mapped |= (1u << RG_KEY_COUNT) - 1;
 #endif
 
 #if defined(RG_GAMEPAD_I2C_MAP)
@@ -367,6 +475,11 @@ void rg_input_init(void)
 void rg_input_deinit(void)
 {
     input_task_running = false;
+    #ifdef RG_TOUCH_CS
+    while (gamepad_state != -1)
+        rg_task_delay(10);
+    rg_touch_deinit();
+    #endif
     // while (gamepad_state != -1)
     //     rg_task_yield();
     RG_LOGI("Input terminated.\n");

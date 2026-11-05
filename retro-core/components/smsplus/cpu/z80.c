@@ -2157,7 +2157,8 @@ void z80_exit(void)
 /****************************************************************************
  * Execute 'cycles' T-states. Return number of T-states really executed
  ****************************************************************************/
-IRAM_ATTR int z80_execute(int cycles)
+/* Retro-Go build: leave the execution loop in flash to reserve IRAM for BLE. */
+RG_EMULATOR_CPU_ATTR int z80_execute(int cycles)
 {
   z80_ICount = cycles;
   z80_requested_cycles = z80_ICount;

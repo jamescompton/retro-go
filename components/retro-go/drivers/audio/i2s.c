@@ -23,7 +23,10 @@
 // We can safely assume that no application will submit more than 640 audio frames per call to
 // driver_submit (32000/50). Using a single large buffer risks blocking the call needlessly because
 // some apps submit more than once per cycle or there could be occasional jitter (early submission).
-#define DMA_BUFFER_COUNT 4
+#ifndef RG_AUDIO_DMA_BUFFER_COUNT
+#define RG_AUDIO_DMA_BUFFER_COUNT 4
+#endif
+#define DMA_BUFFER_COUNT RG_AUDIO_DMA_BUFFER_COUNT
 #define DMA_BUFFER_LEN 180
 
 static struct {
@@ -31,12 +34,20 @@ static struct {
     int device;
     int volume;
     bool muted;
+    #ifdef RG_AUDIO_DAC_SOFT_MUTE
+    int last_sample;
+    unsigned fade_remaining;
+    #endif
 } state;
 
 static bool driver_init(int device, int sample_rate)
 {
     state.last_error = NULL;
     state.device = device;
+    #ifdef RG_AUDIO_DAC_SOFT_MUTE
+    state.last_sample = 0;
+    state.fade_remaining = DMA_BUFFER_LEN;
+    #endif
 
     if (state.device == 0)
     {
@@ -139,6 +150,25 @@ static bool driver_submit(const rg_audio_frame_t *frames, size_t count)
         int left = frames[i].left * volume;
         int right = frames[i].right * volume;
 
+        #ifdef RG_AUDIO_DAC_SOFT_MUTE
+        if (use_internal_dac)
+        {
+            int sample = (left + right) / 2;
+            if (state.fade_remaining)
+            {
+                sample = sample * (DMA_BUFFER_LEN - state.fade_remaining) / DMA_BUFFER_LEN;
+                --state.fade_remaining;
+            }
+            state.last_sample = sample;
+            #if RG_AUDIO_USE_INT_DAC == 2
+            left = 0;
+            right = sample + 0x8000;
+            #else
+            #error "Soft mute currently supports DAC channel 2 only"
+            #endif
+        }
+        else
+        #endif
         if (use_internal_dac)
         {
         #if RG_AUDIO_USE_INT_DAC == 1
@@ -176,7 +206,12 @@ static bool driver_submit(const rg_audio_frame_t *frames, size_t count)
         buffer[pos].left = left;
         buffer[pos].right = right;
 
+        #ifdef RG_AUDIO_DAC_SOFT_MUTE
+        ++pos;
+        if (i == count - 1 || pos == RG_COUNT(buffer))
+        #else
         if (i == count - 1 || ++pos == RG_COUNT(buffer))
+        #endif
         {
             size_t written;
             if (i2s_write(I2S_NUM_0, (void *)buffer, pos * 4, &written, 1000) != ESP_OK)
@@ -189,6 +224,37 @@ static bool driver_submit(const rg_audio_frame_t *frames, size_t count)
 
 static bool driver_set_mute(bool mute)
 {
+    #ifdef RG_AUDIO_DAC_SOFT_MUTE
+    if (state.device == 0)
+    {
+        // Keep the unsigned DAC midpoint in every DMA buffer while menus pause audio.
+        {
+            rg_audio_frame_t silence[DMA_BUFFER_LEN];
+            for (int block = 0; block <= DMA_BUFFER_COUNT; ++block)
+            {
+                for (int i = 0; i < DMA_BUFFER_LEN; ++i)
+                {
+                    int sample = mute && block == 0 ?
+                        state.last_sample * (DMA_BUFFER_LEN - i - 1) / DMA_BUFFER_LEN : 0;
+                    silence[i].left = 0;
+                    silence[i].right = sample + 0x8000;
+                }
+                size_t written = 0;
+                esp_err_t err = i2s_write(I2S_NUM_0, silence, sizeof(silence), &written, pdMS_TO_TICKS(1000));
+                if (err != ESP_OK || written != sizeof(silence))
+                {
+                    RG_LOGE("DAC mute submission failed: %s, bytes=%u/%u",
+                            esp_err_to_name(err), (unsigned)written, (unsigned)sizeof(silence));
+                    state.last_error = err != ESP_OK ? esp_err_to_name(err) : "Incomplete DAC mute write";
+                    return false;
+                }
+            }
+            state.last_sample = 0;
+            state.fade_remaining = mute ? 0 : DMA_BUFFER_LEN;
+        }
+    }
+    else
+    #endif
     i2s_zero_dma_buffer(I2S_NUM_0);
     #ifdef RG_GPIO_SND_AMP_ENABLE
     gpio_set_level(RG_GPIO_SND_AMP_ENABLE, mute ? MUTE_ENABLE : MUTE_DISABLE);

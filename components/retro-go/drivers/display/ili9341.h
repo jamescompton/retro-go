@@ -91,6 +91,10 @@ static void spi_task(void *arg)
 
 static void spi_init(void)
 {
+    #ifdef RG_TOUCH_CS
+    gpio_set_level(RG_TOUCH_CS, 1);
+    gpio_set_direction(RG_TOUCH_CS, GPIO_MODE_OUTPUT);
+    #endif
     spi_transactions = xQueueCreate(SPI_TRANSACTION_COUNT, sizeof(spi_transaction_t *));
     spi_buffers = xQueueCreate(SPI_BUFFER_COUNT, sizeof(uint16_t *));
 
@@ -258,5 +262,9 @@ static void lcd_deinit(void)
 }
 
 const rg_display_driver_t rg_display_driver_ili9341 = {
+#ifdef RG_DISPLAY_DRIVER_NAME
+    .name = RG_DISPLAY_DRIVER_NAME,
+#else
     .name = "ili9341",
+#endif
 };

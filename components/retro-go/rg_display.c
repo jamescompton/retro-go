@@ -1,5 +1,6 @@
 #include "rg_system.h"
 #include "rg_display.h"
+#include "rg_touch.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +39,8 @@ static inline void lcd_send_buffer(uint16_t *buffer, size_t length);
 
 #if RG_SCREEN_DRIVER == 0 || RG_SCREEN_DRIVER == 1 /* ILI9341/ST7789 */
 #include "drivers/display/ili9341.h"
+#elif RG_SCREEN_DRIVER == 2 /* ST7796 */
+#include "drivers/display/st7796.h"
 #elif RG_SCREEN_DRIVER == 99
 #include "drivers/display/sdl2.h"
 #else
@@ -231,6 +234,7 @@ static inline void write_update(const rg_surface_t *update)
         {
             int left = display.screen.margins.left + draw_left;
             int top = display.screen.margins.top + draw_top + y - lines_to_copy;
+            rg_touch_blend(line_buffer, left, top, draw_width, lines_to_copy);
             if (top != window_top)
                 lcd_set_window(left, top, draw_width, lines_remaining);
             lcd_send_buffer(line_buffer, draw_width * lines_to_copy);
@@ -565,6 +569,7 @@ void rg_display_write_rect(int left, int top, int width, int height, int stride,
             }
         }
 
+        rg_touch_blend(lcd_buffer, left, top + y, width, num_lines);
         lcd_send_buffer(lcd_buffer, width * num_lines);
         y += num_lines;
     }
@@ -575,18 +580,19 @@ void rg_display_write_rect(int left, int top, int width, int height, int stride,
 void rg_display_clear_rect(int left, int top, int width, int height, uint16_t color_le)
 {
     const uint16_t color_be = (color_le << 8) | (color_le >> 8);
-    int pixels_remaining = width * height;
-    if (pixels_remaining > 0)
+    if (width > 0 && height > 0)
     {
         lcd_set_window(left + display.screen.margins.left, top + display.screen.margins.top, width, height);
-        while (pixels_remaining > 0)
+        for (int y = 0; y < height;)
         {
             uint16_t *buffer = lcd_get_buffer(LCD_BUFFER_LENGTH);
-            int pixels = RG_MIN(pixels_remaining, LCD_BUFFER_LENGTH);
+            int lines = RG_MIN(height - y, LCD_BUFFER_LENGTH / width);
+            int pixels = lines * width;
             for (size_t j = 0; j < pixels; ++j)
                 buffer[j] = color_be;
+            rg_touch_blend(buffer, left, top + y, width, lines);
             lcd_send_buffer(buffer, pixels);
-            pixels_remaining -= pixels;
+            y += lines;
         }
     }
 }
@@ -643,6 +649,7 @@ void rg_display_init(void)
     display.screen.width -= display.screen.margins.left + display.screen.margins.right;
     display.screen.height -= display.screen.margins.top + display.screen.margins.bottom;
     lcd_init();
+    rg_touch_init();
     rg_display_clear(C_BLACK);
     rg_task_delay(80); // Wait for the screen be cleared before turning on the backlight (40ms doesn't seem to be enough...)
     lcd_set_backlight(config.backlight);

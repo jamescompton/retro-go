@@ -1,4 +1,5 @@
 #include "rg_system.h"
+#include "rg_ble.h"
 
 #include <sys/time.h>
 #include <stdarg.h>
@@ -247,6 +248,11 @@ static void system_monitor_task(void *arg)
 {
     int64_t nextLoopTime = 0;
     time_t prevTime = time(NULL);
+    #if RG_RUNTIME_DIAGNOSTICS
+    rg_audio_counters_t previous_audio = rg_audio_get_counters();
+    rg_display_counters_t previous_display = rg_display_get_counters();
+    int64_t previous_diagnostic_time = rg_system_timer();
+    #endif
 
     rg_task_delay(2000);
 
@@ -274,6 +280,27 @@ static void system_monitor_task(void *arg)
             (int)roundf(statistics.partialFPS),
             (int)roundf(statistics.fullFPS),
             (int)roundf((battery.volts * 1000) ?: battery.level));
+
+        #if RG_RUNTIME_DIAGNOSTICS
+        rg_audio_counters_t current_audio = rg_audio_get_counters();
+        rg_display_counters_t current_display = rg_display_get_counters();
+        int64_t diagnostic_time = rg_system_timer();
+        int64_t interval = diagnostic_time - previous_diagnostic_time;
+        if (interval > 0)
+        {
+            RG_LOGI("Runtime: sink=%s samples/s=%lld audio_ms=%lld display_ms=%lld display_wait_ms=%lld bt_keys=0x%08x bt_buttons=0x%08x",
+                    rg_audio_get_driver() ?: "none",
+                    (long long)((current_audio.totalSamples - previous_audio.totalSamples) * 1000000 / interval),
+                    (long long)((current_audio.busyTime - previous_audio.busyTime) / 1000),
+                    (long long)((current_display.busyTime - previous_display.busyTime) / 1000),
+                    (long long)((current_display.blockTime - previous_display.blockTime) / 1000),
+                    (unsigned)rg_ble_gamepad_state(),
+                    (unsigned)rg_ble_gamepad_buttons());
+        }
+        previous_audio = current_audio;
+        previous_display = current_display;
+        previous_diagnostic_time = diagnostic_time;
+        #endif
 
         // Auto frameskip
         if (statistics.ticks > app.tickRate * 2)
@@ -470,6 +497,7 @@ rg_app_t *rg_system_init(int sampleRate, const rg_handlers_t *handlers, void *_u
     }
 
     rg_settings_init(enterRecoveryMode || showCrashDialog);
+    rg_ble_init();
     app.configNs = rg_settings_get_string(NS_BOOT, SETTING_BOOT_NAME, app.configNs);
     app.bootArgs = rg_settings_get_string(NS_BOOT, SETTING_BOOT_ARGS, app.bootArgs);
     app.bootFlags = rg_settings_get_number(NS_BOOT, SETTING_BOOT_FLAGS, app.bootFlags);
@@ -862,6 +890,9 @@ static void shutdown_cleanup(void)
     rg_gui_draw_hourglass();                  // ...
     rg_system_event(RG_EVENT_SHUTDOWN, NULL); // Allow apps to save their state if they want
     rg_audio_deinit();                        // Disable sound ASAP to avoid audio garbage
+    #if defined(RG_ENABLE_BLE_GAMEPAD) && CONFIG_BT_BLUEDROID_ENABLED
+    rg_bt_shutdown();                         // Notify the controller before rebooting into another app
+    #endif
     // rg_system_save_time();                    // RTC might save to storage, do it before
     rg_storage_deinit();                      // Unmount storage
     rg_input_wait_for_key(RG_KEY_ALL, 0, -1); // Wait for all keys to be released (boot is sensitive to GPIO0,32,33)
@@ -916,6 +947,13 @@ void rg_system_switch_app(const char *partition, const char *name, const char *a
 {
     RG_LOGI("Switching to app %s (%s)", partition ?: "-", name ?: "-");
 
+    #if defined(RG_ENABLE_BLE_GAMEPAD) && CONFIG_BT_BLUEDROID_ENABLED
+    if (rg_ble_gamepad_connected() && !rg_bt_save())
+    {
+        rg_gui_alert("Bluetooth handoff", "Could not save the controller.\nCheck the SD card and try again.");
+        return;
+    }
+    #endif
     if (update_boot_config(partition, name, args, flags))
         rg_system_restart();
 
@@ -1128,6 +1166,17 @@ float rg_system_get_app_speed(void)
 void rg_system_set_overclock(int level)
 {
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+#if !RG_ENABLE_DEV_MODE
+    if (level != 0)
+    {
+        RG_LOGW("Overclock requires RG_ENABLE_DEV_MODE");
+        return;
+    }
+#endif
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_ENABLED
+    if (level != 0)
+        RG_LOGW("Experimental overclock can disrupt Bluetooth clock timing");
+#endif
     // None of this is documented by espressif but there are comments to be found in the file `rtc_clk.c` and `clk_tree_ll.h`
     extern void rom_i2c_writeReg(uint8_t block, uint8_t host_id, uint8_t reg_add, uint8_t data);
     extern uint8_t rom_i2c_readReg(uint8_t block, uint8_t host_id, uint8_t reg_add);

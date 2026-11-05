@@ -34,6 +34,7 @@
 // killough 5/3/98: remove unnecessary headers
 
 #include "doomstat.h"
+#include "esp_attr.h"
 #include "hu_stuff.h"
 #include "hu_lib.h"
 #include "st_stuff.h" /* jff 2/16/98 need loc of status bar */
@@ -162,9 +163,9 @@ char chat_char;                 // remove later.
 static player_t*  plr;
 
 // font sets
-patchnum_t hu_font[HU_FONTSIZE];
-patchnum_t hu_font2[HU_FONTSIZE];
-patchnum_t hu_fontk[HU_FONTSIZE];//jff 3/7/98 added for graphic key indicators
+EXT_RAM_BSS_ATTR patchnum_t hu_font[HU_FONTSIZE];
+EXT_RAM_BSS_ATTR patchnum_t hu_font2[HU_FONTSIZE];
+EXT_RAM_BSS_ATTR patchnum_t hu_fontk[HU_FONTSIZE];//jff 3/7/98 added for graphic key indicators
 patchnum_t hu_msgbg[9];          //jff 2/26/98 add patches for message background
 
 // widgets

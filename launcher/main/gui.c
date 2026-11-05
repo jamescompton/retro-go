@@ -21,6 +21,12 @@ retro_gui_t gui;
 #define SETTING_SCROLL_MODE     "ScrollMode"
 #define SETTING_HIDE_TAB(name)  strcat((char[99]){"HideTab."}, (name))
 
+#ifndef RG_DEFAULT_STARTUP_MODE
+#define RG_DEFAULT_STARTUP_MODE 0
+#else
+#define MIGRATE_STARTUP_DEFAULT
+#endif
+
 static int max_visible_lines(const tab_t *tab, int *_line_height)
 {
     int line_height = TEXT_RECT("ABC123", 0).height;
@@ -30,9 +36,18 @@ static int max_visible_lines(const tab_t *tab, int *_line_height)
 
 void gui_init(bool cold_boot)
 {
+    #ifdef MIGRATE_STARTUP_DEFAULT
+    if (!rg_settings_get_boolean(NS_APP, "LauncherBootDefaultApplied", false))
+    {
+        rg_settings_set_number(NS_APP, SETTING_STARTUP_MODE, RG_DEFAULT_STARTUP_MODE);
+        rg_settings_set_boolean(NS_APP, "LauncherBootDefaultApplied", true);
+        if (!rg_settings_commit())
+            rg_gui_alert("Startup setting", "Could not save launcher default.\nCheck the SD card.");
+    }
+    #endif
     gui = (retro_gui_t){
         .selected_tab = rg_settings_get_number(NS_APP, SETTING_SELECTED_TAB, 0),
-        .startup_mode = rg_settings_get_number(NS_APP, SETTING_STARTUP_MODE, 0),
+        .startup_mode = rg_settings_get_number(NS_APP, SETTING_STARTUP_MODE, RG_DEFAULT_STARTUP_MODE),
         .language     = rg_settings_get_number(NS_APP, SETTING_LANGUAGE, 0),
         .color_theme  = rg_settings_get_number(NS_APP, SETTING_COLOR_THEME, 0),
         .start_screen = rg_settings_get_number(NS_APP, SETTING_START_SCREEN, START_SCREEN_AUTO),

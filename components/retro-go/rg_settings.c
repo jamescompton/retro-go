@@ -87,11 +87,12 @@ void rg_settings_init(bool _safe_mode)
     json_root(NS_BOOT, 0);
 }
 
-void rg_settings_commit(void)
+bool rg_settings_commit(void)
 {
     if (!config_root || safe_mode)
-        return;
+        return false;
 
+    bool success = true;
     for (cJSON *branch = config_root->child; branch; branch = branch->next)
     {
         char *name = cJSON_GetStringValue(cJSON_GetObjectItem(branch, "namespace"));
@@ -102,7 +103,11 @@ void rg_settings_commit(void)
 
         char *buffer = cJSON_Print(cJSON_GetObjectItem(branch, "values"));
         if (!buffer)
+        {
+            RG_LOGE("Config serialization failed: %s", name);
+            success = false;
             continue;
+        }
 
         size_t buffer_len = strlen(buffer) + 1;
 
@@ -113,11 +118,17 @@ void rg_settings_commit(void)
         {
             cJSON_SetNumberHelper(cJSON_GetObjectItem(branch, "changed"), 0);
         }
+        else
+        {
+            RG_LOGE("Config save failed: %s", pathbuf);
+            success = false;
+        }
 
         cJSON_free(buffer);
     }
 
     rg_storage_commit();
+    return success;
 }
 
 void rg_settings_reset(void)

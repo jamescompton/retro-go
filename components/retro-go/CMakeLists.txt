@@ -8,7 +8,22 @@ else() # esp-idf 4.1 - 4.4
     set(COMPONENT_REQUIRES "spi_flash fatfs app_update esp_adc_cal json nvs_flash esp_wifi esp_http_client")
 endif()
 
+if(RG_BUILD_TARGET STREQUAL "RG_TARGET_ESP32_3248S035R")
+    string(APPEND COMPONENT_REQUIRES " bt esp_hid")
+endif()
+
 register_component()
+
+if(RG_BUILD_TARGET STREQUAL "RG_TARGET_ESP32_3248S035R")
+    idf_component_get_property(bt_lib bt COMPONENT_LIB)
+    idf_component_get_property(hid_lib esp_hid COMPONENT_LIB)
+    target_link_libraries(${COMPONENT_LIB} PUBLIC ${hid_lib} ${bt_lib})
+    component_compile_options(-DRG_ENABLE_BLE_GAMEPAD)
+    if((IDF_VERSION_MAJOR EQUAL 5) AND (IDF_VERSION_MINOR EQUAL 2))
+        component_compile_options(-DRG_BT_RESTORE_METADATA=1)
+        target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=esp_bt_hid_host_register_callback")
+    endif()
+endif()
 
 # Small size is preferred because of the small cache and most things here aren't performance sensitive!
 # rg_display and rg_audio benefit from higher optimization (which of -O2 or -O3 is better depends...)

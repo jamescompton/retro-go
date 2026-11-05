@@ -1,5 +1,7 @@
 #include "rg_system.h"
 #include "rg_gui.h"
+#include "rg_ble.h"
+#include "rg_touch.h"
 
 #include <cJSON.h>
 #include <math.h>
@@ -1566,6 +1568,7 @@ static rg_gui_event_t custom_zoom_cb(rg_gui_option_t *option, rg_gui_event_t eve
     return RG_DIALOG_VOID;
 }
 
+#if RG_ENABLE_DEV_MODE && (CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3)
 static rg_gui_event_t overclock_cb(rg_gui_option_t *option, rg_gui_event_t event)
 {
     // if (event == RG_DIALOG_ENTER)
@@ -1586,6 +1589,7 @@ static rg_gui_event_t overclock_cb(rg_gui_option_t *option, rg_gui_event_t event
         sprintf(option->value, "%d (%dMhz)", rg_system_get_overclock(), rg_system_get_cpu_speed());
     return RG_DIALOG_VOID;
 }
+#endif
 
 static rg_gui_event_t speedup_update_cb(rg_gui_option_t *option, rg_gui_event_t event)
 {
@@ -1994,6 +1998,183 @@ static rg_gui_event_t wifi_cb(rg_gui_option_t *option, rg_gui_event_t event)
 }
 #endif
 
+#if defined(RG_ENABLE_BLE_GAMEPAD) && CONFIG_BT_BLUEDROID_ENABLED
+static rg_gui_event_t bluetooth_device_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    rg_bt_device_t device;
+    bool found = rg_bt_device_get(option->arg, &device);
+    snprintf(option->value, 32, "%.31s", found ? device.name : "-");
+    if (event == RG_DIALOG_ENTER)
+    {
+        if (!found || !rg_bt_connect(option->arg))
+            rg_gui_alert("Bluetooth", "No device or connection unavailable.");
+        else
+            return RG_DIALOG_CANCEL;
+    }
+    return RG_DIALOG_VOID;
+}
+
+static rg_gui_event_t bluetooth_status_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (option->arg == 1)
+    {
+        rg_bt_device_t device;
+        snprintf(option->value, 32, "%.31s", rg_bt_saved_get(&device) ? device.name : "None");
+    }
+    else
+        snprintf(option->value, 32, "%s", rg_bt_status());
+    return RG_DIALOG_VOID;
+}
+
+static rg_gui_event_t bluetooth_action_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (option->arg == 0)
+        strcpy(option->value, rg_bt_enabled() ? _("On") : _("Off"));
+    if (event != RG_DIALOG_ENTER && !(option->arg == 0 &&
+        (event == RG_DIALOG_PREV || event == RG_DIALOG_NEXT)))
+        return RG_DIALOG_VOID;
+    bool ok = false;
+    switch (option->arg)
+    {
+    case 4:
+        return RG_DIALOG_UPDATE;
+    case 0:
+        if (rg_bt_enabled() && !rg_gui_confirm("Bluetooth", "Disconnect controller until reboot?", false))
+            return RG_DIALOG_VOID;
+        ok = rg_bt_set_enabled(!rg_bt_enabled());
+        break;
+    case 1:
+        if (!rg_bt_enabled())
+        {
+            rg_gui_alert("Bluetooth", "Enable Bluetooth before scanning.");
+            return RG_DIALOG_REDRAW;
+        }
+        ok = rg_bt_scan();
+        if (ok)
+        {
+            const rg_gui_option_t devices[] = {
+                {0, "Status", "-", RG_DIALOG_FLAG_MESSAGE, bluetooth_status_cb},
+                {4, "Refresh devices", NULL, RG_DIALOG_FLAG_NORMAL, bluetooth_action_cb},
+                {0, "1", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_device_cb},
+                {1, "2", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_device_cb},
+                {2, "3", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_device_cb},
+                {3, "4", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_device_cb},
+                {4, "5", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_device_cb},
+                {5, "6", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_device_cb},
+                {6, "7", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_device_cb},
+                {7, "8", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_device_cb},
+                RG_DIALOG_END,
+            };
+            rg_gui_dialog("Scan / connect", devices, 1);
+        }
+        break;
+    case 2:
+        ok = rg_bt_enabled() && rg_bt_reconnect();
+        break;
+    case 3:
+        ok = rg_bt_save();
+        if (ok) rg_gui_alert("Bluetooth", "Controller saved for reconnect.");
+        break;
+    }
+    if (!ok) rg_gui_alert("Bluetooth", "Action unavailable or failed.\nCheck connection and serial log.");
+    return RG_DIALOG_REDRAW;
+}
+
+static rg_gui_event_t bluetooth_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (event == RG_DIALOG_ENTER)
+    {
+        const rg_gui_option_t options[] = {
+            {0, "Bluetooth enable", "-", RG_DIALOG_FLAG_NORMAL, bluetooth_action_cb},
+            {0, "Status", "-", RG_DIALOG_FLAG_MESSAGE, bluetooth_status_cb},
+            {4, "Refresh status", NULL, RG_DIALOG_FLAG_NORMAL, bluetooth_action_cb},
+            {1, "Scan / connect", NULL, RG_DIALOG_FLAG_NORMAL, bluetooth_action_cb},
+            {2, "Connect saved", NULL, RG_DIALOG_FLAG_NORMAL, bluetooth_action_cb},
+            {3, "Save controller", NULL, RG_DIALOG_FLAG_NORMAL, bluetooth_action_cb},
+            {1, "Saved", "-", RG_DIALOG_FLAG_MESSAGE, bluetooth_status_cb},
+            RG_DIALOG_END,
+        };
+        rg_gui_dialog("Bluetooth", options, 0);
+        return RG_DIALOG_REDRAW;
+    }
+    return RG_DIALOG_VOID;
+}
+#endif
+
+#ifdef RG_TOUCH_CS
+static rg_gui_event_t touch_setting_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    static const char *names[] = {"White", "Red", "Green", "Blue", "Yellow"};
+    bool change = event == RG_DIALOG_ENTER || event == RG_DIALOG_PREV || event == RG_DIALOG_NEXT;
+    if (change)
+    {
+        int delta = event == RG_DIALOG_PREV ? -1 : 1;
+        bool saved = true;
+        switch (option->arg)
+        {
+        case 0:
+            saved = rg_touch_configure(!rg_touch_enabled(), rg_touch_colour(), rg_touch_opacity());
+            break;
+        case 1:
+            saved = rg_touch_configure(rg_touch_enabled(), (rg_touch_colour() + delta + 5) % 5, rg_touch_opacity());
+            break;
+        case 2:
+            saved = rg_touch_configure(rg_touch_enabled(), rg_touch_colour(), rg_touch_opacity() + delta * 10);
+            break;
+        case 3:
+            saved = rg_touch_set_labels(!rg_touch_labels());
+            break;
+        case 5:
+            if (rg_touch_input_enabled() &&
+                !rg_gui_confirm("Touch input", "Disable touch input?\nUse the controller to re-enable.", false))
+                return RG_DIALOG_VOID;
+            saved = rg_touch_set_input_enabled(!rg_touch_input_enabled());
+            break;
+        case 4:
+            if (event == RG_DIALOG_ENTER)
+            {
+                if (!rg_touch_calibrate())
+                    rg_gui_alert("Touch calibration", "Calibration cancelled or failed.\nCheck touches and SD card.");
+                else
+                    rg_gui_alert("Touch calibration", "Calibration saved.");
+            }
+            break;
+        }
+        if (!saved) rg_gui_alert("Touch controls", "Settings not saved. Check SD card.");
+        return RG_DIALOG_REDRAW;
+    }
+    switch (option->arg)
+    {
+    case 0: strcpy(option->value, rg_touch_enabled() ? _("On") : _("Off")); break;
+    case 1: strcpy(option->value, names[rg_touch_colour()]); break;
+    case 2: snprintf(option->value, 32, "%d%%", rg_touch_opacity()); break;
+    case 3: strcpy(option->value, rg_touch_labels() ? _("On") : _("Off")); break;
+    case 4: strcpy(option->value, rg_touch_calibrated() ? "Ready" : "Required"); break;
+    case 5: strcpy(option->value, rg_touch_input_enabled() ? _("On") : _("Off")); break;
+    }
+    return RG_DIALOG_VOID;
+}
+
+static rg_gui_event_t touch_options_cb(rg_gui_option_t *option, rg_gui_event_t event)
+{
+    if (event == RG_DIALOG_ENTER)
+    {
+        const rg_gui_option_t options[] = {
+            {5, "Touch input", "-", RG_DIALOG_FLAG_NORMAL, touch_setting_cb},
+            {0, "Show overlay", "-", RG_DIALOG_FLAG_NORMAL, touch_setting_cb},
+            {1, "Colour", "-", RG_DIALOG_FLAG_NORMAL, touch_setting_cb},
+            {2, "Opacity", "-", RG_DIALOG_FLAG_NORMAL, touch_setting_cb},
+            {3, "Button labels", "-", RG_DIALOG_FLAG_NORMAL, touch_setting_cb},
+            {4, "Calibrate touch", "-", RG_DIALOG_FLAG_NORMAL, touch_setting_cb},
+            RG_DIALOG_END,
+        };
+        rg_gui_dialog("Touch controls", options, 0);
+        return RG_DIALOG_REDRAW;
+    }
+    return RG_DIALOG_VOID;
+}
+#endif
+
 static rg_gui_event_t app_options_cb(rg_gui_option_t *option, rg_gui_event_t event)
 {
     if (event == RG_DIALOG_ENTER)
@@ -2034,6 +2215,12 @@ void rg_gui_options_menu(void)
         #ifdef RG_ENABLE_NETWORKING
         {0, _("Wi-Fi options"), NULL, RG_DIALOG_FLAG_NORMAL, &wifi_cb},
         #endif
+        #if defined(RG_ENABLE_BLE_GAMEPAD) && CONFIG_BT_BLUEDROID_ENABLED
+        {0, "Bluetooth options", NULL, RG_DIALOG_FLAG_NORMAL, bluetooth_cb},
+        #endif
+        #ifdef RG_TOUCH_CS
+        {0, "Touch controls", NULL, RG_DIALOG_FLAG_NORMAL, touch_options_cb},
+        #endif
         {0, _("Launcher options"), NULL, RG_DIALOG_FLAG_NORMAL, &app_options_cb},
         RG_DIALOG_END,
     };
@@ -2044,10 +2231,16 @@ void rg_gui_options_menu(void)
         {0, _("Border"),        "-", RG_DIALOG_FLAG_NORMAL, &border_update_cb},
         {0, _("Speed"),         "-", RG_DIALOG_FLAG_NORMAL, &speedup_update_cb},
         // {0, _("Misc options"),  NULL, RG_DIALOG_FLAG_NORMAL, &misc_options_cb},
-        #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3 // && !RG_BUILD_RELEASE
+        #if RG_ENABLE_DEV_MODE && (CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3)
         {0, _("Overclock"),     "-", RG_DIALOG_FLAG_NORMAL, &overclock_cb},
         #endif
         {0, _("Emulator options"), NULL, RG_DIALOG_FLAG_NORMAL, &app_options_cb},
+        #if defined(RG_ENABLE_BLE_GAMEPAD) && CONFIG_BT_BLUEDROID_ENABLED
+        {0, "Bluetooth options", NULL, RG_DIALOG_FLAG_NORMAL, bluetooth_cb},
+        #endif
+        #ifdef RG_TOUCH_CS
+        {0, "Touch controls", NULL, RG_DIALOG_FLAG_NORMAL, touch_options_cb},
+        #endif
         RG_DIALOG_END,
     };
 

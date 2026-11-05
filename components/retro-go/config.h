@@ -32,6 +32,8 @@
 #include "targets/crokpocket/config.h"
 #elif defined(RG_TARGET_REDROID_GO)
 #include "targets/redroid-go/config.h"
+#elif defined(RG_TARGET_ESP32_3248S035R)
+#include "targets/esp32-3248s035r/config.h"
 #else
 #warning "No target defined. Defaulting to ODROID-GO."
 #include "targets/odroid-go/config.h"
@@ -65,6 +67,18 @@
 
 #ifndef RG_BUILD_INFO
 #define RG_BUILD_INFO "(none)"
+#endif
+
+#ifndef RG_ENABLE_DEV_MODE
+#define RG_ENABLE_DEV_MODE 0
+#endif
+
+#ifndef RG_RUNTIME_DIAGNOSTICS
+#define RG_RUNTIME_DIAGNOSTICS 0
+#endif
+
+#ifndef RG_GBC_SKIP_BUSY_VIDEO
+#define RG_GBC_SKIP_BUSY_VIDEO 0
 #endif
 
 #ifndef RG_BUILD_TIME

@@ -16,11 +16,17 @@ extern "C" {
 #include <esp_idf_version.h>
 #include <esp_heap_caps.h>
 #include <esp_attr.h>
+#if defined(CONFIG_BT_ENABLED) && CONFIG_BT_ENABLED
+#define RG_EMULATOR_CPU_ATTR
+#else
+#define RG_EMULATOR_CPU_ATTR IRAM_ATTR
+#endif
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(4, 4, 0)
 #error "Retro-Go requires ESP-IDF version 4.4.0 or newer!"
 #endif
 #else
 #define IRAM_ATTR
+#define RG_EMULATOR_CPU_ATTR
 #define RTC_NOINIT_ATTR
 #endif
 

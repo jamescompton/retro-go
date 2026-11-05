@@ -211,8 +211,12 @@ void rg_audio_set_mute(bool mute)
     if (!ACQUIRE_DEVICE(1000))
         return;
 
-    if (audio.driver->set_mute)
-        audio.driver->set_mute(mute);
+    if (audio.driver->set_mute && !audio.driver->set_mute(mute))
+    {
+        RG_LOGE("Audio mute change failed: %s", audio.driver->get_error ? audio.driver->get_error() : "driver error");
+        RELEASE_DEVICE();
+        return;
+    }
 
     audio.muted = mute;
     RELEASE_DEVICE();

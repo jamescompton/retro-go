@@ -9,6 +9,10 @@
 #define USE_I2C_DRIVER 1
 #endif
 
+#ifndef RG_I2C_SPEED
+#define RG_I2C_SPEED 400000
+#endif
+
 static bool i2c_initialized = false;
 
 #define TRY(x)                 \
@@ -27,7 +31,7 @@ bool rg_i2c_init(void)
         .scl_io_num = RG_GPIO_I2C_SCL,
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 400000,
+        .master.clk_speed = RG_I2C_SPEED,
     };
     esp_err_t err = ESP_FAIL;
 
@@ -60,6 +64,11 @@ bool rg_i2c_deinit(void)
 
 bool rg_i2c_read(uint8_t addr, int reg, void *read_data, size_t read_len)
 {
+    return rg_i2c_read_timeout(addr, reg, read_data, read_len, 500);
+}
+
+bool rg_i2c_read_timeout(uint8_t addr, int reg, void *read_data, size_t read_len, unsigned timeout_ms)
+{
 #if USE_I2C_DRIVER
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     esp_err_t err = ESP_FAIL;
@@ -77,7 +86,7 @@ bool rg_i2c_read(uint8_t addr, int reg, void *read_data, size_t read_len)
     TRY(i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_READ, true));
     TRY(i2c_master_read(cmd, read_data, read_len, I2C_MASTER_LAST_NACK));
     TRY(i2c_master_stop(cmd));
-    TRY(i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(500)));
+    TRY(i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(timeout_ms)));
     i2c_cmd_link_delete(cmd);
     return true;
 fail:
