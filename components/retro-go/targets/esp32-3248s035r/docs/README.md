@@ -234,3 +234,10 @@ Do not use the app-only command if the installed partition layout differs. The S
 - `RG_SNES_FULL_PAD_KEYMAP 1` adds a default "Full pad" SNES keymap: Start, Select, L1/R1 and all four face buttons map straight to their SNES buttons (SNES A = right face, B = bottom, X = top, Y = left). It uses the setting key `keymap_full`, so saved indexes for the stock Type A/B/C maps don't shift.
 - Verified in Super Mario World: L/R scroll, Start pauses, Select drops the reserve item.
 - SNES runs at about 35–40 of 60 fps with CPU 0 at 100%, which raises non-fatal IDLE0 task-watchdog warnings. Overclock stays off to protect Bluetooth timing.
+
+## x43/x44: SNES audio
+
+- `main_snes.c` can take a target audio rate (`RG_SNES_AUDIO_SAMPLE_RATE`) and turn off sample interpolation (`RG_SNES_AUDIO_INTERPOLATION`).
+- x43 tried 16 kHz, but the internal-DAC I2S only drained about 9.7k samples/s, so the blocking audio submit held SNES at 30 fps. Do not lower the rate on this board.
+- x44 keeps 32 kHz and turns interpolation off only. In Super Mario World with the speaker on: 38-48 fps, 24-31k samples/s, CPU 0 at 62-95%.
+- If switching the audio sink to Speaker resets the board, lower the volume first or use a steadier USB supply (the amplifier's start-up current can dip the supply).

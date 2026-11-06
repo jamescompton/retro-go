@@ -83,6 +83,14 @@ static const char *SNES_BUTTONS[] = {
 
 #define AUDIO_LOW_PASS_RANGE ((60 * 65536) / 100)
 
+#ifdef RG_SNES_AUDIO_SAMPLE_RATE
+// Mixing cost scales with the output rate, so a lower rate frees CPU for the emulator.
+#define SNES_AUDIO_RATE RG_SNES_AUDIO_SAMPLE_RATE
+#else
+#define SNES_AUDIO_RATE AUDIO_SAMPLE_RATE
+#endif
+#define SNES_AUDIO_LENGTH (SNES_AUDIO_RATE / 50 + 1)
+
 static rg_app_t *app;
 static rg_surface_t *updates[2];
 static rg_surface_t *currentUpdate;
@@ -323,7 +331,7 @@ void snes_main(void)
         .event = &event_handler,
         .options = &options_handler,
     };
-    app = rg_system_reinit(AUDIO_SAMPLE_RATE, &handlers, NULL);
+    app = rg_system_reinit(SNES_AUDIO_RATE, &handlers, NULL);
 
     apu_enabled = rg_settings_get_number(NS_APP, SETTING_APU_EMULATION, 1);
 
@@ -331,7 +339,7 @@ void snes_main(void)
     updates[0]->height = SNES_HEIGHT;
     currentUpdate = updates[0];
 
-    audioBuffer = (rg_audio_sample_t *)malloc(AUDIO_BUFFER_LENGTH * 4);
+    audioBuffer = (rg_audio_sample_t *)malloc(SNES_AUDIO_LENGTH * 4);
 
     update_keymap(rg_settings_get_number(NS_APP, SETTING_KEYMAP, 0));
 
@@ -341,10 +349,10 @@ void snes_main(void)
     Settings.FrameTimeNTSC = 16667;
     Settings.ControllerOption = SNES_JOYPAD;
     Settings.HBlankStart = (256 * Settings.H_Max) / SNES_HCOUNTER_MAX;
-    Settings.SoundPlaybackRate = AUDIO_SAMPLE_RATE;
-    Settings.SoundInputRate = AUDIO_SAMPLE_RATE;
+    Settings.SoundPlaybackRate = SNES_AUDIO_RATE;
+    Settings.SoundInputRate = SNES_AUDIO_RATE;
     Settings.DisableSoundEcho = false;
-    Settings.InterpolatedSound = true;
+    Settings.InterpolatedSound = RG_SNES_AUDIO_INTERPOLATION;
 
     if (!S9xInitDisplay())
         RG_PANIC("Display init failed!");
@@ -438,16 +446,16 @@ void snes_main(void)
 
     #ifndef USE_BLARGG_APU
         if (apu_enabled && lowpass_filter)
-            S9xMixSamplesLowPass((void *)audioBuffer, AUDIO_BUFFER_LENGTH << 1, AUDIO_LOW_PASS_RANGE);
+            S9xMixSamplesLowPass((void *)audioBuffer, SNES_AUDIO_LENGTH << 1, AUDIO_LOW_PASS_RANGE);
         else if (apu_enabled)
-            S9xMixSamples((void *)audioBuffer, AUDIO_BUFFER_LENGTH << 1);
+            S9xMixSamples((void *)audioBuffer, SNES_AUDIO_LENGTH << 1);
     #endif
 
         rg_system_tick(rg_system_timer() - startTime);
 
     #ifndef USE_BLARGG_APU
         if (apu_enabled)
-            rg_audio_submit(audioBuffer, AUDIO_BUFFER_LENGTH);
+            rg_audio_submit(audioBuffer, SNES_AUDIO_LENGTH);
     #endif
 
         if (skipFrames == 0)

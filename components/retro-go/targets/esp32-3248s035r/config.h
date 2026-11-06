@@ -44,6 +44,9 @@
 #define RG_NES_BT_SWAP_AB           1
 // SNES default keymap uses X/Y/L/R directly instead of Menu combos.
 #define RG_SNES_FULL_PAD_KEYMAP     1
+// SNES is CPU-bound here; skip sample interpolation for emulation headroom.
+// (16 kHz was tried in x43: the internal DAC drained only ~9.7k samples/s and capped SNES at 30 fps.)
+#define RG_SNES_AUDIO_INTERPOLATION 0
 #define RG_SCREEN_INIT()                                                                                         \
     rg_usleep(120 * 1000);                                                                                       \
     ILI9341_CMD(0xF0, 0xC3);                                                                                     \
