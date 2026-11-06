@@ -43,6 +43,7 @@ static rg_keymap_virt_t keymap_virt[] = RG_GAMEPAD_VIRT_MAP;
 static bool input_task_running = false;
 static uint32_t gamepad_state = -1; // _Atomic
 static uint32_t gamepad_mapped = 0;
+static uint32_t gamepad_non_bt_state = 0; // Last raw state from every source except Bluetooth
 #if RG_MINI_JOYSTICK
 static uint32_t mini_joystick_state;
 #endif
@@ -212,11 +213,12 @@ bool rg_input_read_gamepad_raw(uint32_t *out)
     }
 #endif
 
-    state |= rg_ble_gamepad_state();
-    state |= rg_touch_read();
+    uint32_t non_bt_state = state | rg_touch_read();
 #if RG_MINI_JOYSTICK
-    state |= mini_joystick_state;
+    non_bt_state |= mini_joystick_state;
 #endif
+    gamepad_non_bt_state = non_bt_state;
+    state = non_bt_state | rg_ble_gamepad_state();
 
     if (out)
         *out = state;
@@ -496,6 +498,16 @@ uint32_t rg_input_read_gamepad(void)
     SDL_PumpEvents();
 #endif
     return gamepad_state;
+}
+
+uint32_t rg_input_read_gamepad_bt_swap_ab(void)
+{
+    uint32_t state = rg_input_read_gamepad();
+    uint32_t bt = rg_ble_gamepad_state();
+    uint32_t ab = gamepad_non_bt_state & (RG_KEY_A | RG_KEY_B);
+    if (bt & RG_KEY_A) ab |= RG_KEY_B;
+    if (bt & RG_KEY_B) ab |= RG_KEY_A;
+    return (state & ~(RG_KEY_A | RG_KEY_B)) | ab;
 }
 
 bool rg_input_key_is_pressed(rg_key_t mask)

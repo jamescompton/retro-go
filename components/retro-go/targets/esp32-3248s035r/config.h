@@ -40,6 +40,8 @@
 #define RG_PCE_SKIP_BUSY_VIDEO      1
 #define RG_SNES_SKIP_BUSY_VIDEO     1
 #define RG_LYNX_SKIP_BUSY_VIDEO     1
+// Q36 labels: A bottom, B right. NES games use right = A, bottom = B.
+#define RG_NES_BT_SWAP_AB           1
 #define RG_SCREEN_INIT()                                                                                         \
     rg_usleep(120 * 1000);                                                                                       \
     ILI9341_CMD(0xF0, 0xC3);                                                                                     \
@@ -57,12 +59,16 @@
     ILI9341_CMD(0xF0, 0x69);                                                                                     \
     rg_usleep(120 * 1000);
 
+// Q36 in Xbox mode: A=0 B=1 X=3 Y=4 L1=6 R1=7 Start=11; bits 2, 5 and 8-10 are unused.
+// L2/R2 are analog triggers (Simulation Brake/Accelerator), read through the trigger keys below.
 #define RG_GAMEPAD_HID_BUTTON_MAP { \
-    RG_KEY_A, RG_KEY_B, RG_KEY_X, RG_KEY_Y, RG_KEY_L, RG_KEY_R, \
-    RG_KEY_MENU, RG_KEY_OPTION, RG_KEY_SELECT, RG_KEY_START, \
+    RG_KEY_A, RG_KEY_B, RG_KEY_NONE, RG_KEY_X, RG_KEY_Y, RG_KEY_NONE, \
+    RG_KEY_L, RG_KEY_R, RG_KEY_NONE, RG_KEY_NONE, \
     RG_KEY_NONE, RG_KEY_START, \
 }
 #define RG_GAMEPAD_HID_BACK_KEY RG_KEY_SELECT
+#define RG_GAMEPAD_HID_LTRIGGER_KEY RG_KEY_MENU
+#define RG_GAMEPAD_HID_RTRIGGER_KEY RG_KEY_OPTION
 
 #define RG_MINI_JOYSTICK            1
 #define RG_GPIO_I2C_SDA             GPIO_NUM_21

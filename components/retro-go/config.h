@@ -101,6 +101,10 @@
 #define RG_LYNX_SKIP_BUSY_VIDEO 0
 #endif
 
+#ifndef RG_NES_BT_SWAP_AB
+#define RG_NES_BT_SWAP_AB 0
+#endif
+
 #ifndef RG_BUILD_TIME
 // 2020-01-31 00:00:00, first retro-go commit :)
 #define RG_BUILD_TIME 1580446800

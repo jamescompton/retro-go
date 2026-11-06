@@ -287,6 +287,11 @@ void nes_main(void)
         bool drawFrame = !skipFrames && !nsfPlayer;
         int buttons = 0;
 
+    #if RG_NES_BT_SWAP_AB
+        // Match the NES pad layout on the Bluetooth controller: right face = A, bottom face = B.
+        joystick = rg_input_read_gamepad_bt_swap_ab();
+    #endif
+
         if (joystick & RG_KEY_START)  buttons |= NES_PAD_START;
         if (joystick & RG_KEY_SELECT) buttons |= NES_PAD_SELECT;
         if (joystick & RG_KEY_UP)     buttons |= NES_PAD_UP;

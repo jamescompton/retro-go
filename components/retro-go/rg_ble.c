@@ -60,6 +60,12 @@ typedef struct
     int y_size;
     int y_min;
     int y_max;
+    int lt_offset;
+    int lt_size;
+    int lt_max;
+    int rt_offset;
+    int rt_size;
+    int rt_max;
 } hid_layout_t;
 
 #ifdef RG_GAMEPAD_HID_BUTTON_MAP
@@ -139,6 +145,8 @@ static void parse_report_map(const uint8_t *data, size_t length)
         .hat_offset = -1,
         .x_offset = -1,
         .y_offset = -1,
+        .lt_offset = -1,
+        .rt_offset = -1,
     };
     int usage_page = 0;
     int report_size = 0;
@@ -241,6 +249,27 @@ static void parse_report_map(const uint8_t *data, size_t length)
                         }
                     }
                 }
+                else if (usage_page == 0x02 && (unsigned_value & 2))
+                {
+                    // Simulation controls: Brake (0xC5) is the left trigger, Accelerator (0xC4) the right.
+                    for (int k = 0; k < report_count; ++k)
+                    {
+                        int usage = k < usage_count ? usages[k] : (usage_min >= 0 ? usage_min + k : -1);
+                        int offset = bit_offset + k * report_size;
+                        if (usage == 0xC5 && parsed.lt_offset < 0)
+                        {
+                            parsed.lt_offset = offset;
+                            parsed.lt_size = report_size;
+                            parsed.lt_max = logical_max;
+                        }
+                        else if (usage == 0xC4 && parsed.rt_offset < 0)
+                        {
+                            parsed.rt_offset = offset;
+                            parsed.rt_size = report_size;
+                            parsed.rt_max = logical_max;
+                        }
+                    }
+                }
                 else if (usage_page == 1 && (unsigned_value & 2))
                 {
                     for (int k = 0; k < report_count; ++k)
@@ -283,9 +312,9 @@ static void parse_report_map(const uint8_t *data, size_t length)
     parsed.valid = parsed.buttons_offset >= 0 || parsed.hat_offset >= 0 ||
                    parsed.x_offset >= 0 || parsed.y_offset >= 0;
     hid_layout = parsed;
-    RG_LOGI("BLE HID report map: bytes=%u report=%u valid=%d buttons=%d hat=%d x=%d y=%d",
+    RG_LOGI("BLE HID report map: bytes=%u report=%u valid=%d buttons=%d hat=%d x=%d y=%d lt=%d rt=%d",
             (unsigned)length, parsed.report_id, parsed.valid, parsed.buttons_count,
-            parsed.hat_offset, parsed.x_offset, parsed.y_offset);
+            parsed.hat_offset, parsed.x_offset, parsed.y_offset, parsed.lt_offset, parsed.rt_offset);
 }
 
 static uint32_t get_bits(const uint8_t *data, size_t length, int offset, int size, bool is_signed)
@@ -357,6 +386,16 @@ static void handle_gamepad_report(uint16_t report_id, const uint8_t *data, size_
     #ifdef RG_GAMEPAD_HID_BACK_KEY
     if (get_bits(data, length, hid_layout.back_offset, hid_layout.back_size, false))
         keys |= RG_GAMEPAD_HID_BACK_KEY;
+    #endif
+    #ifdef RG_GAMEPAD_HID_LTRIGGER_KEY
+    if (hid_layout.lt_offset >= 0 && hid_layout.lt_max > 0 &&
+        (int)get_bits(data, length, hid_layout.lt_offset, hid_layout.lt_size, false) > hid_layout.lt_max / 2)
+        keys |= RG_GAMEPAD_HID_LTRIGGER_KEY;
+    #endif
+    #ifdef RG_GAMEPAD_HID_RTRIGGER_KEY
+    if (hid_layout.rt_offset >= 0 && hid_layout.rt_max > 0 &&
+        (int)get_bits(data, length, hid_layout.rt_offset, hid_layout.rt_size, false) > hid_layout.rt_max / 2)
+        keys |= RG_GAMEPAD_HID_RTRIGGER_KEY;
     #endif
 
     if (hid_layout.hat_offset >= 0 && hid_layout.hat_size <= 8)

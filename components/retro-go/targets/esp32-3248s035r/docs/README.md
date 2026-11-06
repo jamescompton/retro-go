@@ -220,3 +220,11 @@ python -m esptool --chip esp32 --port COM10 --baud 460800 write_flash 0x10000 la
 ```
 
 Do not use the app-only command if the installed partition layout differs. The SD preference file survives either method, but erasing NVS requires Bluetooth pairing again even if a controller address is still saved on SD.
+
+## x40/x41: Q36 button layout
+
+- Q36 (Xbox Bluetooth layout) raw buttons: A=0, B=1, X=3, Y=4, L1=6, R1=7, Start=11; Select is Consumer AC Back.
+- L2/R2 are analog triggers (Simulation Brake at bit 64, Accelerator at bit 80, 10-bit). `rg_ble.c` now parses them, and `RG_GAMEPAD_HID_LTRIGGER_KEY`/`RTRIGGER_KEY` turn a press above half travel into a key.
+- Mapping: L2 = Menu, R2 = Options, L1/R1 = L/R, X/Y fixed, Start/Select unchanged.
+- `RG_NES_BT_SWAP_AB 1`: in NES games only, the Bluetooth A/B are swapped (right face = A, bottom face = B). Wired and touch input are unaffected.
+- Verified on hardware: the report map is parsed with `lt=64 rt=80`, and A/B/Start reach the game in Super Mario World. SMW's opening text box waits for a button press; this is normal, not a freeze.

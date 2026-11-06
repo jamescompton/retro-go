@@ -94,6 +94,9 @@ bool rg_input_key_is_present(rg_key_t mask);
 bool rg_input_key_is_pressed(rg_key_t mask);
 bool rg_input_wait_for_key(rg_key_t mask, bool pressed, int timeout_ms);
 uint32_t rg_input_read_gamepad(void);
+// Same as rg_input_read_gamepad, but with the Bluetooth gamepad's A and B swapped.
+// Lets an emulator match a controller's physical layout without changing wired or touch input.
+uint32_t rg_input_read_gamepad_bt_swap_ab(void);
 rg_battery_t rg_input_read_battery(void);
 bool rg_input_read_gamepad_raw(uint32_t *out);
 bool rg_input_read_battery_raw(rg_battery_t *out);
