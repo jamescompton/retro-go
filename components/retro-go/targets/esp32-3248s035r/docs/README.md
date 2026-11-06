@@ -30,7 +30,16 @@ x37 hardware comparison: both app flash hashes verified on COM10 (ESP32 MAC `68:
 ### Display SPI at 80 MHz (x38)
 
 x38 raises `RG_SCREEN_SPEED` from 40 MHz to `SPI_MASTER_FREQ_80M`. The ST7796 uses GPIO12-15, the ESP32's native HSPI IOMUX pins. The XPT2046 touch controller shares that bus, but its device runs at 1 MHz and is unaffected. In a 2-minute Monster World III capture at overclock 0 on COM10, calm scenes rendered nearly every frame: 1-5 of 60 skipped at 63-80% busy, compared with x37's heavy skipping. Enemy-heavy scenes held 60 simulated FPS and 31,800-32,400 audio samples/sec, but still skipped 20-32 frames at 90-95% busy, so the remaining limit there is CPU emulation load. The user confirmed the picture is clean and gameplay feels smoother. Firmware: `retro-go_1.46-classic-x38_esp32-3248s035r.img`, CRC verified. If a particular panel shows corruption, return to `SPI_MASTER_FREQ_40M`.
-- ESP32-WROOM-32, 4 MB flash, original ESP32 with Classic Bluetooth and BLE radio
+
+### Busy-display skip for remaining retro-core systems (x39)
+
+x39 applies the same pattern to the remaining retro-core emulators through target-only `RG_NES_SKIP_BUSY_VIDEO`, `RG_PCE_SKIP_BUSY_VIDEO`, `RG_SNES_SKIP_BUSY_VIDEO` and `RG_LYNX_SKIP_BUSY_VIDEO`. Game Gear and ColecoVision already use the Master System path. Game & Watch already submitted only when the display was free.
+
+- NES: tracks the last submitted surface and renders the next frame into the other one. A busy display drops the frame. Redraw requests are always submitted. Palettes are identical on both surfaces.
+- PC Engine and Lynx: the surface swap happens only after a successful submit, so a dropped frame is re-rendered into the same unowned surface. Lynx redraws now use the last complete frame.
+- SNES: single-buffered, so it only stops queuing frames while the display is busy. Its existing render-while-transfer behaviour is unchanged.
+
+Genesis, Doom and MSX are separate apps that are not part of this image and were not changed. x39 was flashed to COM10 with both app hashes verified and booted to the launcher without errors. Per-system gameplay testing is pending. Firmware: `retro-go_1.46-classic-x39_esp32-3248s035r.img`, CRC verified; retro-core is 1,496,032 bytes, leaving 11,296 bytes spare.- ESP32-WROOM-32, 4 MB flash, original ESP32 with Classic Bluetooth and BLE radio
 - ESP-PSRAM64H, 8 MB fitted at U4; ESP-IDF maps the supported 4 MB addressable region
 - PSRAM is configured as 64-Mbit Quad SPI at 80 MHz, using the ESP32 defaults GPIO16 for CS and GPIO17 for clock
 - The PSRAM U4 pin 1 and pin 6 are isolated from the footprint pads and wired to GPIO16 and GPIO17; pin 1 has a 10 kOhm pull-up to 3.3 V

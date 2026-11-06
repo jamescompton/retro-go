@@ -17,6 +17,9 @@ static int dpad_mapped_right;
 static rg_app_t *app;
 static rg_surface_t *updates[2];
 static rg_surface_t *currentUpdate;
+#if RG_LYNX_SKIP_BUSY_VIDEO
+static rg_surface_t *lastSubmittedUpdate = NULL;
+#endif
 // static bool netplay = false;
 // --- MAIN
 
@@ -132,7 +135,12 @@ static void event_handler(int event, void *arg)
 {
     if (event == RG_EVENT_REDRAW)
     {
+    #if RG_LYNX_SKIP_BUSY_VIDEO
+        // currentUpdate is the surface being rendered into; redraw the last complete frame instead.
+        rg_display_submit(lastSubmittedUpdate ? lastSubmittedUpdate : currentUpdate, 0);
+    #else
         rg_display_submit(currentUpdate, 0);
+    #endif
     }
 }
 
@@ -260,9 +268,20 @@ extern "C" void lynx_main(void)
         if (drawFrame)
         {
             slowFrame = !rg_display_sync(false);
+        #if RG_LYNX_SKIP_BUSY_VIDEO
+            // Keep rendering into the unsubmitted surface while the display is busy.
+            if (!slowFrame)
+            {
+                rg_display_submit(currentUpdate, 0);
+                lastSubmittedUpdate = currentUpdate;
+                currentUpdate = updates[currentUpdate == updates[0]];
+                gPrimaryFrameBuffer = (UBYTE*)currentUpdate->data;
+            }
+        #else
             rg_display_submit(currentUpdate, 0);
             currentUpdate = updates[currentUpdate == updates[0]];
             gPrimaryFrameBuffer = (UBYTE*)currentUpdate->data;
+        #endif
         }
 
         // The Lynx has a variable tick rate, I don't know of a better way to guess than from audio stream

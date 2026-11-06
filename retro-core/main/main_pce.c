@@ -57,8 +57,17 @@ void osd_vsync(void)
     if (drawFrame)
     {
         slowFrame = !rg_display_sync(false);
+    #if RG_PCE_SKIP_BUSY_VIDEO
+        // Keep rendering into the unsubmitted surface while the display is busy.
+        if (!slowFrame)
+        {
+            rg_display_submit(currentUpdate, 0);
+            currentUpdate = updates[currentUpdate == updates[0]];
+        }
+    #else
         rg_display_submit(currentUpdate, 0);
         currentUpdate = updates[currentUpdate == updates[0]];
+    #endif
     }
 
     // See if we need to skip a frame to keep up

@@ -12,6 +12,9 @@ static nes_t *nes;
 static rg_app_t *app;
 static rg_surface_t *updates[2];
 static rg_surface_t *currentUpdate;
+#if RG_NES_SKIP_BUSY_VIDEO
+static rg_surface_t *lastSubmittedUpdate;
+#endif
 
 static const char *SETTING_AUTOCROP = "autocrop";
 static const char *SETTING_OVERSCAN = "overscan";
@@ -159,7 +162,16 @@ static void blit_screen(uint8 *bmp)
     currentUpdate->width = NES_SCREEN_WIDTH - crop_h * 2;
     currentUpdate->height = NES_SCREEN_HEIGHT - crop_v * 2;
     currentUpdate->offset = crop_v * currentUpdate->stride + crop_h + 8;
+#if RG_NES_SKIP_BUSY_VIDEO
+    // Drop the frame rather than wait while the display still owns the previous surface.
+    // Redraw requests (bmp == NULL) are always submitted.
+    if (slowFrame)
+        return;
     rg_display_submit(currentUpdate, 0);
+    lastSubmittedUpdate = currentUpdate;
+#else
+    rg_display_submit(currentUpdate, 0);
+#endif
 }
 
 static void nsf_draw_overlay(void)
@@ -286,7 +298,11 @@ void nes_main(void)
 
         if (drawFrame)
         {
+        #if RG_NES_SKIP_BUSY_VIDEO
+            currentUpdate = updates[lastSubmittedUpdate == updates[0]];
+        #else
             currentUpdate = updates[currentUpdate == updates[0]];
+        #endif
             nes_setvidbuf(currentUpdate->data);
         }
 

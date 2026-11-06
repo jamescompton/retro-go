@@ -36,6 +36,10 @@
 #define RG_SCREEN_SAFE_AREA         {0, 0, 0, 0}
 #define RG_GBC_SKIP_BUSY_VIDEO      1
 #define RG_SMS_SKIP_BUSY_VIDEO      1
+#define RG_NES_SKIP_BUSY_VIDEO      1
+#define RG_PCE_SKIP_BUSY_VIDEO      1
+#define RG_SNES_SKIP_BUSY_VIDEO     1
+#define RG_LYNX_SKIP_BUSY_VIDEO     1
 #define RG_SCREEN_INIT()                                                                                         \
     rg_usleep(120 * 1000);                                                                                       \
     ILI9341_CMD(0xF0, 0xC3);                                                                                     \

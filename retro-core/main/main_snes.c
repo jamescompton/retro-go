@@ -407,7 +407,12 @@ void snes_main(void)
         if (drawFrame)
         {
             slowFrame = !rg_display_sync(false);
+        #if RG_SNES_SKIP_BUSY_VIDEO
+            if (!slowFrame)
+                rg_display_submit(currentUpdate, 0);
+        #else
             rg_display_submit(currentUpdate, 0);
+        #endif
         }
 
     #ifndef USE_BLARGG_APU
