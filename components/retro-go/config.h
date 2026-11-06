@@ -112,6 +112,12 @@
 #ifndef RG_SNES_AUDIO_INTERPOLATION
 #define RG_SNES_AUDIO_INTERPOLATION 1
 #endif
+#ifndef RG_SNES_AUDIO_TASK
+#define RG_SNES_AUDIO_TASK 0
+#endif
+#ifndef RG_SNES_AUDIO_FRAME_LENGTH
+#define RG_SNES_AUDIO_FRAME_LENGTH 0
+#endif
 
 #ifndef RG_BUILD_TIME
 // 2020-01-31 00:00:00, first retro-go commit :)

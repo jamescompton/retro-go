@@ -241,3 +241,13 @@ Do not use the app-only command if the installed partition layout differs. The S
 - x43 tried 16 kHz, but the internal-DAC I2S only drained about 9.7k samples/s, so the blocking audio submit held SNES at 30 fps. Do not lower the rate on this board.
 - x44 keeps 32 kHz and turns interpolation off only. In Super Mario World with the speaker on: 38-48 fps, 24-31k samples/s, CPU 0 at 62-95%.
 - If switching the audio sink to Speaker resets the board, lower the volume first or use a steadier USB supply (the amplifier's start-up current can dip the supply).
+
+## x45-x50: SNES audio on core 1
+
+- `RG_SNES_AUDIO_TASK 1`: SNES audio mixing and submission run in a `snes_audio` task pinned to core 1. Core 0 keeps the emulator and Bluetooth. The main loop waits for the previous frame's mix before sending the next, and before opening menus.
+- `RG_SNES_AUDIO_FRAME_LENGTH 1`: each emulated frame mixes at least `rate / ROMFramesPerSecond` samples, and up to 1/25 s when the frame took longer. This keeps the DAC fed when SNES runs below full speed. Long frames are mixed in 640-sample chunks to stay within the snes9x mix buffer.
+- Result (Super Mario World, 32 kHz, speaker): user rated it "dang near almost playable"; about 32-43 fps.
+- Rejected on hardware:
+  - 16 kHz (x43, x48): `i2s_get_clk` reports 16000 Hz, but the internal DAC drains only about 9.8k samples/s, so SNES drops to about 21 fps.
+  - `tx_desc_auto_clear` (x48/x49): an underrun outputs 0 V instead of mid-scale on the internal DAC. This makes loud pops and visible screen flicker.
+- `i2s.c` logs the requested and actual I2S rate whenever the sample rate changes.

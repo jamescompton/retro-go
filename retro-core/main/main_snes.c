@@ -90,11 +90,23 @@ static const char *SNES_BUTTONS[] = {
 #define SNES_AUDIO_RATE AUDIO_SAMPLE_RATE
 #endif
 #define SNES_AUDIO_LENGTH (SNES_AUDIO_RATE / 50 + 1)
+#if RG_SNES_AUDIO_TASK && defined(ESP_PLATFORM)
+// When the emulator runs slow, each frame is given up to 1/25 s of audio so the DAC doesn't starve.
+#define SNES_AUDIO_MAX_LENGTH (SNES_AUDIO_RATE / 25 + 1)
+#else
+#define SNES_AUDIO_MAX_LENGTH SNES_AUDIO_LENGTH
+#endif
 
 static rg_app_t *app;
 static rg_surface_t *updates[2];
 static rg_surface_t *currentUpdate;
 static rg_audio_sample_t *audioBuffer;
+static size_t audioLength = SNES_AUDIO_LENGTH;
+
+#if RG_SNES_AUDIO_TASK && defined(ESP_PLATFORM)
+// Mixes and submits the previous frame's audio on the other core while the next frame is emulated.
+static rg_task_t *audioTask;
+#endif
 
 static bool apu_enabled = true;
 static bool lowpass_filter = false;
@@ -313,6 +325,47 @@ static void S9xAudioCallback(void)
 }
 #endif
 
+#if RG_SNES_AUDIO_TASK && defined(ESP_PLATFORM)
+// The mixer handles at most SOUND_BUFFER_SIZE (1321, see soundux.h) samples per call, so long frames are mixed in chunks.
+#define SNES_AUDIO_CHUNK 640
+
+static void mix_audio_frame(size_t length)
+{
+    for (size_t pos = 0; pos < length;)
+    {
+        size_t count = RG_MIN(length - pos, (size_t)SNES_AUDIO_CHUNK);
+        int16_t *dest = (int16_t *)&audioBuffer[pos];
+        if (lowpass_filter)
+            S9xMixSamplesLowPass(dest, count << 1, AUDIO_LOW_PASS_RANGE);
+        else
+            S9xMixSamples(dest, count << 1);
+        pos += count;
+    }
+    rg_audio_submit(audioBuffer, length);
+}
+
+static void audio_task(void *arg)
+{
+    rg_task_msg_t msg;
+    while (rg_task_peek(&msg))
+    {
+        if (msg.type == RG_TASK_MSG_STOP)
+            break;
+        mix_audio_frame(msg.dataInt);
+        rg_task_receive(&msg);
+    }
+}
+#endif
+
+// Must be called before anything (menus, states, reset) touches the sound state from the main task.
+static void audio_wait_idle(void)
+{
+#if RG_SNES_AUDIO_TASK && defined(ESP_PLATFORM)
+    while (audioTask && rg_task_messages_waiting(audioTask))
+        rg_task_yield();
+#endif
+}
+
 static void options_handler(rg_gui_option_t *dest)
 {
     *dest++ = (rg_gui_option_t){0, _("Audio enable"), "-", RG_DIALOG_FLAG_NORMAL, &apu_toggle_cb};
@@ -339,7 +392,7 @@ void snes_main(void)
     updates[0]->height = SNES_HEIGHT;
     currentUpdate = updates[0];
 
-    audioBuffer = (rg_audio_sample_t *)malloc(SNES_AUDIO_LENGTH * 4);
+    audioBuffer = (rg_audio_sample_t *)malloc(SNES_AUDIO_MAX_LENGTH * 4);
 
     update_keymap(rg_settings_get_number(NS_APP, SETTING_KEYMAP, 0));
 
@@ -387,6 +440,17 @@ void snes_main(void)
     S9xSetPlaybackRate(Settings.SoundPlaybackRate);
 #endif
 
+#if RG_SNES_AUDIO_FRAME_LENGTH
+    // Mix exactly one frame of audio per emulated frame (the stock /50 overproduces for 60 Hz games).
+    if (Memory.ROMFramesPerSecond > 0)
+        audioLength = RG_MIN(SNES_AUDIO_RATE / Memory.ROMFramesPerSecond + 1, SNES_AUDIO_LENGTH);
+#endif
+    RG_LOGI("SNES audio: %d Hz, %d samples/frame\n", SNES_AUDIO_RATE, (int)audioLength);
+
+#if RG_SNES_AUDIO_TASK && defined(ESP_PLATFORM)
+    audioTask = rg_task_create("snes_audio", &audio_task, NULL, 4 * 1024, RG_TASK_PRIORITY_5, 1);
+#endif
+
     if (app->bootFlags & RG_BOOT_RESUME)
     {
         rg_emu_load_state(app->saveSlot);
@@ -398,6 +462,9 @@ void snes_main(void)
     bool menuCancelled = false;
     bool menuPressed = false;
     int skipFrames = 0;
+#if RG_SNES_AUDIO_TASK && defined(ESP_PLATFORM)
+    int64_t lastAudioTime = 0;
+#endif
 
     while (1)
     {
@@ -407,6 +474,7 @@ void snes_main(void)
         {
             if (!menuCancelled)
             {
+                audio_wait_idle();
                 rg_task_delay(50);
                 rg_gui_game_menu();
             }
@@ -414,6 +482,7 @@ void snes_main(void)
         }
         else if (joystick & RG_KEY_OPTION)
         {
+            audio_wait_idle();
             rg_gui_options_menu();
         }
 
@@ -445,17 +514,35 @@ void snes_main(void)
         }
 
     #ifndef USE_BLARGG_APU
+    #if !(RG_SNES_AUDIO_TASK && defined(ESP_PLATFORM))
         if (apu_enabled && lowpass_filter)
-            S9xMixSamplesLowPass((void *)audioBuffer, SNES_AUDIO_LENGTH << 1, AUDIO_LOW_PASS_RANGE);
+            S9xMixSamplesLowPass((void *)audioBuffer, audioLength << 1, AUDIO_LOW_PASS_RANGE);
         else if (apu_enabled)
-            S9xMixSamples((void *)audioBuffer, SNES_AUDIO_LENGTH << 1);
+            S9xMixSamples((void *)audioBuffer, audioLength << 1);
+    #endif
     #endif
 
         rg_system_tick(rg_system_timer() - startTime);
 
     #ifndef USE_BLARGG_APU
+    #if RG_SNES_AUDIO_TASK && defined(ESP_PLATFORM)
+        // Hand this frame's mixing to the other core; waiting for the previous one keeps audio pacing.
         if (apu_enabled)
-            rg_audio_submit(audioBuffer, SNES_AUDIO_LENGTH);
+        {
+            // Mix as much audio as real time has passed so the DAC stays fed when emulation runs slow.
+            int64_t now = rg_system_timer();
+            size_t length = audioLength;
+            if (lastAudioTime > 0)
+                length = RG_MAX(length, (size_t)((now - lastAudioTime) * SNES_AUDIO_RATE / 1000000) + 1);
+            length = RG_MIN(length, (size_t)SNES_AUDIO_MAX_LENGTH);
+            lastAudioTime = now;
+            audio_wait_idle();
+            rg_task_send(audioTask, &(rg_task_msg_t){.dataInt = length});
+        }
+    #else
+        if (apu_enabled)
+            rg_audio_submit(audioBuffer, audioLength);
+    #endif
     #endif
 
         if (skipFrames == 0)

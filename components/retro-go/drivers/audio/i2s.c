@@ -112,7 +112,9 @@ static bool driver_init(int device, int sample_rate)
 
 static bool driver_set_sample_rates(int sampleRate)
 {
-    return i2s_set_sample_rates(I2S_NUM_0, sampleRate) == ESP_OK;
+    bool ok = i2s_set_sample_rates(I2S_NUM_0, sampleRate) == ESP_OK;
+    RG_LOGI("I2S rate requested=%d actual=%.1f\n", sampleRate, i2s_get_clk(I2S_NUM_0));
+    return ok;
 }
 
 static bool driver_deinit(void)

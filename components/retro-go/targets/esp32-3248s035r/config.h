@@ -47,6 +47,11 @@
 // SNES is CPU-bound here; skip sample interpolation for emulation headroom.
 // (16 kHz was tried in x43: the internal DAC drained only ~9.7k samples/s and capped SNES at 30 fps.)
 #define RG_SNES_AUDIO_INTERPOLATION 0
+// Don't lower RG_SNES_AUDIO_SAMPLE_RATE: at 16 kHz the internal DAC reports 16000 Hz but drains only ~9.8k samples/s (x43, x48).
+// Mix SNES audio on core 1 (core 0 runs the emulator and Bluetooth).
+#define RG_SNES_AUDIO_TASK          1
+// Mix one 60/50 Hz frame of audio per emulated frame instead of a fixed 1/50 s.
+#define RG_SNES_AUDIO_FRAME_LENGTH  1
 #define RG_SCREEN_INIT()                                                                                         \
     rg_usleep(120 * 1000);                                                                                       \
     ILI9341_CMD(0xF0, 0xC3);                                                                                     \
