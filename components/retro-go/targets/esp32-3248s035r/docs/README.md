@@ -2,6 +2,16 @@
 
 Target for the resistive-touch Sunton ESP32-3248S035R (CYD) with the ESP-PSRAM64H U4 modification documented in the user's hardware notes.
 
+## Photos
+
+The board running Retro-Go, with the wired NULLLAB Mini-Joystick (I²C) and ShanWan Q36 Bluetooth controllers.
+
+![SNES game running](photo-1-snes.jpg)
+
+![On-screen touch controls in game](photo-2-touch-overlay.jpg)
+
+![Launcher Game Boy Color list with preview](photo-3-launcher-gbc.jpg)
+
 ## Working baseline: x35 (GB/GBC tested)
 
 Firmware `retro-go_1.46-classic-x35_esp32-3248s035r.img` was built with ESP-IDF 5.2.6, flashed to the modified board, and tested by the user. Confirmed so far:
