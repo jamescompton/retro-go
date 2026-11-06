@@ -14,6 +14,23 @@ typedef struct
 } keymap_t;
 
 static const keymap_t KEYMAPS[] = {
+#if RG_SNES_FULL_PAD_KEYMAP
+	// Positional match for an Xbox-layout pad: SNES A right, B bottom, X top, Y left.
+	{"Full pad", {
+		{SNES_A_MASK, RG_KEY_B, 0},
+		{SNES_B_MASK, RG_KEY_A, 0},
+		{SNES_X_MASK, RG_KEY_Y, 0},
+		{SNES_Y_MASK, RG_KEY_X, 0},
+		{SNES_TL_MASK, RG_KEY_L, 0},
+		{SNES_TR_MASK, RG_KEY_R, 0},
+		{SNES_START_MASK, RG_KEY_START, 0},
+		{SNES_SELECT_MASK, RG_KEY_SELECT, 0},
+		{SNES_UP_MASK, RG_KEY_UP, 0},
+		{SNES_DOWN_MASK, RG_KEY_DOWN, 0},
+		{SNES_LEFT_MASK, RG_KEY_LEFT, 0},
+		{SNES_RIGHT_MASK, RG_KEY_RIGHT, 0},
+	}},
+#endif
 	{"Type A", {
 		{SNES_A_MASK, RG_KEY_A, 0},
 		{SNES_B_MASK, RG_KEY_B, 0},
@@ -77,7 +94,11 @@ static bool lowpass_filter = false;
 static int keymap_id = 0;
 static keymap_t keymap;
 
+#if RG_SNES_FULL_PAD_KEYMAP
+static const char *SETTING_KEYMAP = "keymap_full"; // new key so old saved indexes don't shift
+#else
 static const char *SETTING_KEYMAP = "keymap";
+#endif
 static const char *SETTING_APU_EMULATION = "apu";
 // --- MAIN
 

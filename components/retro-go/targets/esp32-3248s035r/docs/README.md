@@ -228,3 +228,9 @@ Do not use the app-only command if the installed partition layout differs. The S
 - Mapping: L2 = Menu, R2 = Options, L1/R1 = L/R, X/Y fixed, Start/Select unchanged.
 - `RG_NES_BT_SWAP_AB 1`: in NES games only, the Bluetooth A/B are swapped (right face = A, bottom face = B). Wired and touch input are unaffected.
 - Verified on hardware: the report map is parsed with `lt=64 rt=80`, and A/B/Start reach the game in Super Mario World. SMW's opening text box waits for a button press; this is normal, not a freeze.
+
+## x42: SNES full-pad keymap
+
+- `RG_SNES_FULL_PAD_KEYMAP 1` adds a default "Full pad" SNES keymap: Start, Select, L1/R1 and all four face buttons map straight to their SNES buttons (SNES A = right face, B = bottom, X = top, Y = left). It uses the setting key `keymap_full`, so saved indexes for the stock Type A/B/C maps don't shift.
+- Verified in Super Mario World: L/R scroll, Start pauses, Select drops the reserve item.
+- SNES runs at about 35–40 of 60 fps with CPU 0 at 100%, which raises non-fatal IDLE0 task-watchdog warnings. Overclock stays off to protect Bluetooth timing.

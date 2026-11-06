@@ -42,6 +42,8 @@
 #define RG_LYNX_SKIP_BUSY_VIDEO     1
 // Q36 labels: A bottom, B right. NES games use right = A, bottom = B.
 #define RG_NES_BT_SWAP_AB           1
+// SNES default keymap uses X/Y/L/R directly instead of Menu combos.
+#define RG_SNES_FULL_PAD_KEYMAP     1
 #define RG_SCREEN_INIT()                                                                                         \
     rg_usleep(120 * 1000);                                                                                       \
     ILI9341_CMD(0xF0, 0xC3);                                                                                     \
