@@ -5,6 +5,10 @@
 static rg_app_t *app;
 static rg_surface_t *updates[2];
 static rg_surface_t *currentUpdate;
+#if RG_SMS_SKIP_BUSY_VIDEO
+static rg_surface_t *lastSubmittedUpdate;
+static uint16_t latestPalette[256];
+#endif
 
 const rg_keyboard_layout_t coleco_keyboard = {
     .layout = "123" "456" "789" "*0#",
@@ -21,6 +25,9 @@ static void event_handler(int event, void *arg)
     if (event == RG_EVENT_REDRAW)
     {
         rg_display_submit(currentUpdate, 0);
+        #if RG_SMS_SKIP_BUSY_VIDEO
+        lastSubmittedUpdate = currentUpdate;
+        #endif
     }
 }
 
@@ -238,16 +245,35 @@ void sms_main(void)
             }
         }
 
+        #if RG_SMS_SKIP_BUSY_VIDEO
+        if (drawFrame)
+        {
+            currentUpdate = updates[lastSubmittedUpdate == updates[0]];
+            bitmap.data = currentUpdate->data;
+        }
+        #endif
         system_frame(!drawFrame);
 
         if (drawFrame)
         {
+            #if RG_SMS_SKIP_BUSY_VIDEO
+            // Keep palette changes without modifying the display-owned surface.
+            render_copy_palette(latestPalette);
+            memcpy(currentUpdate->palette, latestPalette, sizeof(latestPalette));
+            slowFrame = !rg_display_sync(false);
+            if (!slowFrame)
+            {
+                rg_display_submit(currentUpdate, 0);
+                lastSubmittedUpdate = currentUpdate;
+            }
+            #else
             if (render_copy_palette(currentUpdate->palette))
                 memcpy(updates[currentUpdate == updates[0]]->palette, currentUpdate->palette, 512);
             slowFrame = !rg_display_sync(false);
             rg_display_submit(currentUpdate, 0);
             currentUpdate = updates[currentUpdate == updates[0]]; // Swap
             bitmap.data = currentUpdate->data;
+            #endif
         }
 
         // The emulator's sound buffer isn't in a very convenient format, we must remix it.

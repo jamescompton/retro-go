@@ -19,6 +19,17 @@ The sections below retain the chronological investigation, including earlier fai
 
 ## Hardware configuration
 
+### Master System performance investigation (x37)
+
+Monster World III on x35 showed 43-47 simulated FPS in busy scenes, display submission waits up to 405ms per second, and audio production falling to about 23,200 samples/sec versus the 32,000 target. x37 enables target-only `RG_SMS_SKIP_BUSY_VIDEO`: skip display submission when the previous surface is still queued, reuse the unqueued surface, and keep a separate latest palette so dropped frames do not lose palette updates or modify display-owned palette memory. Other targets retain the existing submission path; explicit redraws remain synchronous through the display API. Hardware comparison is pending.
+
+The user further clarified that the reconnect difficulty appears when the controller is powered on late, rather than consistently depending on emulator type. This is not yet a captured reconnect failure; no Bluetooth changes are included in x37.
+
+x37 hardware comparison: both app flash hashes verified on COM10 (ESP32 MAC `68:09:47:f7:06:8c`), preserving NVS and SD settings. The 40-second Monster World III gameplay capture held 59-61 simulated FPS and approximately 31,800-32,400 audio samples/sec; display submission wait was zero apart from one 2ms sample. The user confirmed the enemy-heavy scene was smooth with clean audio. The connected Bluetooth controller supplied input throughout. The wired module was not responding on I2C during both baseline and comparison captures; these results do not revalidate wired input. Other emulator cores have not received this change or been performance-verified. Firmware: `retro-go_1.46-classic-x37_esp32-3248s035r.img`; launcher 1,483,456 bytes, retro-core 1,496,000 bytes. Image CRC, embedded apps, partition fit and busy-buffer/palette ownership model were checked.
+
+### Display SPI at 80 MHz (x38)
+
+x38 raises `RG_SCREEN_SPEED` from 40 MHz to `SPI_MASTER_FREQ_80M`. The ST7796 uses GPIO12-15, the ESP32's native HSPI IOMUX pins. The XPT2046 touch controller shares that bus, but its device runs at 1 MHz and is unaffected. In a 2-minute Monster World III capture at overclock 0 on COM10, calm scenes rendered nearly every frame: 1-5 of 60 skipped at 63-80% busy, compared with x37's heavy skipping. Enemy-heavy scenes held 60 simulated FPS and 31,800-32,400 audio samples/sec, but still skipped 20-32 frames at 90-95% busy, so the remaining limit there is CPU emulation load. The user confirmed the picture is clean and gameplay feels smoother. Firmware: `retro-go_1.46-classic-x38_esp32-3248s035r.img`, CRC verified. If a particular panel shows corruption, return to `SPI_MASTER_FREQ_40M`.
 - ESP32-WROOM-32, 4 MB flash, original ESP32 with Classic Bluetooth and BLE radio
 - ESP-PSRAM64H, 8 MB fitted at U4; ESP-IDF maps the supported 4 MB addressable region
 - PSRAM is configured as 64-Mbit Quad SPI at 80 MHz, using the ESP32 defaults GPIO16 for CS and GPIO17 for clock

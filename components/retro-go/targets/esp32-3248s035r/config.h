@@ -26,7 +26,7 @@
 // Video
 #define RG_SCREEN_DRIVER            2
 #define RG_SCREEN_HOST              SPI2_HOST
-#define RG_SCREEN_SPEED             SPI_MASTER_FREQ_40M
+#define RG_SCREEN_SPEED             SPI_MASTER_FREQ_80M  // GPIO12-15 are native HSPI IOMUX pins; verified clean on hardware (x38)
 #define RG_SCREEN_BACKLIGHT         1
 #define RG_SCREEN_WIDTH             480
 #define RG_SCREEN_HEIGHT            320
@@ -35,6 +35,7 @@
 #define RG_SCREEN_VISIBLE_AREA      {0, 0, 0, 0}
 #define RG_SCREEN_SAFE_AREA         {0, 0, 0, 0}
 #define RG_GBC_SKIP_BUSY_VIDEO      1
+#define RG_SMS_SKIP_BUSY_VIDEO      1
 #define RG_SCREEN_INIT()                                                                                         \
     rg_usleep(120 * 1000);                                                                                       \
     ILI9341_CMD(0xF0, 0xC3);                                                                                     \
