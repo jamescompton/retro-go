@@ -5,7 +5,7 @@
 #include <gwenesis.h>
 
 #define AUDIO_SAMPLE_RATE (53267)
-#define AUDIO_BUFFER_LENGTH (AUDIO_SAMPLE_RATE / 60 + 1)
+#define AUDIO_BUFFER_LENGTH GWENESIS_AUDIO_BUFFER_CAPACITY
 
 extern unsigned char* VRAM;
 extern int zclk;
@@ -34,6 +34,32 @@ static const char *SETTING_YFM_EMULATION = "yfm_enable";
 static const char *SETTING_Z80_EMULATION = "z80_enable";
 static const char *SETTING_SN76489_EMULATION = "sn_enable";
 // --- MAIN
+
+static int audio_pending_sample;
+static bool audio_pending;
+static RG_GWENESIS_RAM_ATTR rg_audio_frame_t mixed_audio[(AUDIO_BUFFER_LENGTH + 1) / 2];
+
+static size_t mix_audio_frame(rg_audio_frame_t *output, size_t count)
+{
+    size_t written = 0;
+    for (size_t i = 0; i < count; ++i)
+    {
+        int sample = (yfm_enabled ? gwenesis_ym2612_buffer[i] : 0) +
+                     (sn76489_enabled ? gwenesis_sn76489_buffer[i] : 0);
+        if (!audio_pending)
+        {
+            audio_pending_sample = sample;
+            audio_pending = true;
+            continue;
+        }
+        sample = (audio_pending_sample + sample) / 2;
+        if (sample > INT16_MAX) sample = INT16_MAX;
+        if (sample < INT16_MIN) sample = INT16_MIN;
+        output[written++] = (rg_audio_frame_t){sample, sample};
+        audio_pending = false;
+    }
+    return written;
+}
 
 typedef struct {
     char key[28];
@@ -269,6 +295,11 @@ void app_main(void)
     uint32_t joystick = 0, joystick_old;
 
     int skipFrames = 0;
+#if RG_RUNTIME_DIAGNOSTICS
+    int64_t profileStart = rg_system_timer();
+    int64_t cpuTime = 0, synthesisTime = 0, outputTime = 0;
+    unsigned profileFrames = 0;
+#endif
 #if RG_GWENESIS_YIELD_INTERVAL_MS
     int64_t nextYield = 0;
 #endif
@@ -324,8 +355,15 @@ void app_main(void)
 
         while (scan_line < lines_per_frame)
         {
+#if RG_RUNTIME_DIAGNOSTICS
+            int64_t sectionStart = rg_system_timer();
+#endif
             m68k_run(system_clock + VDP_CYCLES_PER_LINE);
             z80_run(system_clock + VDP_CYCLES_PER_LINE);
+#if RG_RUNTIME_DIAGNOSTICS
+            cpuTime += rg_system_timer() - sectionStart;
+            sectionStart = rg_system_timer();
+#endif
 
             /* Audio */
             /*  GWENESIS_AUDIO_ACCURATE:
@@ -336,6 +374,9 @@ void app_main(void)
                 gwenesis_SN76489_run(system_clock + VDP_CYCLES_PER_LINE);
                 ym2612_run(system_clock + VDP_CYCLES_PER_LINE);
             }
+#if RG_RUNTIME_DIAGNOSTICS
+            synthesisTime += rg_system_timer() - sectionStart;
+#endif
 
             /* Video */
             if (drawFrame && scan_line < screen_height)
@@ -401,10 +442,36 @@ void app_main(void)
 
         rg_system_tick(rg_system_timer() - startTime);
 
-        if (yfm_enabled || z80_enabled) {
-            // TODO: Mix in gwenesis_sn76489_buffer
-            rg_audio_submit((void *)gwenesis_ym2612_buffer, AUDIO_BUFFER_LENGTH >> 1);
+        if (yfm_enabled || sn76489_enabled)
+        {
+#if RG_RUNTIME_DIAGNOSTICS
+            int64_t outputStart = rg_system_timer();
+#endif
+            size_t samples = yfm_enabled ? ym2612_index : sn76489_index;
+            RG_ASSERT(samples <= AUDIO_BUFFER_LENGTH, "MD audio buffer overflow");
+            if (yfm_enabled && sn76489_enabled)
+                RG_ASSERT(ym2612_index == sn76489_index, "MD audio chip clocks differ");
+            size_t frames = mix_audio_frame(mixed_audio, samples);
+            rg_audio_submit(mixed_audio, frames);
+#if RG_RUNTIME_DIAGNOSTICS
+            outputTime += rg_system_timer() - outputStart;
+#endif
         }
+        else
+            audio_pending = false;
+
+#if RG_RUNTIME_DIAGNOSTICS
+        ++profileFrames;
+        if (rg_system_timer() - profileStart >= 1000000)
+        {
+            RG_LOGI("MD audio: frames=%u cpu_us=%lld synth_us=%lld output_us=%lld FM=%d PSG=%d Z80=%d line=%d",
+                    profileFrames, (long long)cpuTime, (long long)synthesisTime, (long long)outputTime,
+                    yfm_enabled, sn76489_enabled, z80_enabled, RG_GWENESIS_LINE_AUDIO);
+            profileStart = rg_system_timer();
+            profileFrames = 0;
+            cpuTime = synthesisTime = outputTime = 0;
+        }
+#endif
 
         if (skipFrames == 0)
         {

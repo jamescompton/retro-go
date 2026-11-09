@@ -101,6 +101,10 @@
 #define RG_GWENESIS_YIELD_INTERVAL_MS 0
 #endif
 
+#ifndef RG_GWENESIS_LINE_AUDIO
+#define RG_GWENESIS_LINE_AUDIO 0
+#endif
+
 #ifndef RG_GBC_SKIP_BUSY_VIDEO
 #define RG_GBC_SKIP_BUSY_VIDEO 0
 #endif

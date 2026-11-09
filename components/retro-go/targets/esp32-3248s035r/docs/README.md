@@ -24,6 +24,18 @@ x52 was app-only flashed to the verified board (MAC `68:09:47:f7:06:8c`, COM28),
 
 Audio-enabled gameplay remains CPU-limited: roughly 26-42 simulated FPS at 96-99% busy in the captured scenes, with only 11-19K samples/sec versus the approximately 26.6K target. The memory change is not an audio-speed fix. The wired joystick was not responding on I2C during this test; Bluetooth input reports were observed. x51 Core and Doom artifacts remain available; x52 is an MD-only update.
 
+### Combined audio experiment (x53)
+
+x53 mixes FM and PSG into one clipped mono stream, averages pairs of native-rate samples into duplicated left/right output, and carries an odd sample between frames. It submits only samples actually generated, rather than reinterpreting a fixed mono buffer as stereo. Both source buffers now cover the longer PAL frame, with bounds checked before synthesis writes. Disabled chips are excluded from mixing. This also fixes the previous PSG-only option generating sound that was never submitted.
+
+This target additionally tests scanline-batched synthesis instead of chip-access synchronization, trading sub-scanline sound accuracy for fewer synchronization calls. Other targets retain chip-access synchronization. Once-per-second timing separates CPU emulation, explicit synthesis, and mixing/submission; CPU time includes the emulated sound driver's work.
+
+The approved app-only flash and boot were verified on the same board. Combined FM+PSG measured approximately 30-32 simulated FPS, 0.52-0.54 seconds CPU emulation, 0.32-0.34 seconds synthesis, and 0.019 seconds mixing/output per second. Internal heap stayed near 91 KB. The user judged combined audio poor and reported a large improvement when disabling PSG. The capture contains only one complete subsequent FM-only timing interval (31 frames, 0.558 seconds CPU and 0.300 seconds synthesis), so it does not establish a sustained twofold speedup or a gain over x52. x53 is experimental, not a successful speed fix; x52 remains the fallback image. No automatic rollback or further flash was performed.
+
+### Battery indication
+
+The published [ESP32-3248S035 MCU V1.1 schematic](https://github.com/rzeldent/platformio-espressif32-sunton/blob/main/assets/schematics/ESP32-3248S035-MCU-V1.1.jpg) shows no onboard battery charger or battery-voltage sense connection. GPIO34 measures the light sensor network, not battery voltage. The existing Retro-Go battery icon cannot show a meaningful level without added sensing hardware; it remains unavailable by user choice. An added voltage divider only measures voltage and does not provide lithium-cell charging or protection. Confirm the external power/charging circuitry before adding sense wiring.
+
 In an ESP-IDF 5.2 PowerShell environment, select one profile and use `all` so the target chooses the correct apps:
 
 ```powershell

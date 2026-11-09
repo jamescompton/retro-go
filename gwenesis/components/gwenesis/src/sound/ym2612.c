@@ -2157,6 +2157,7 @@ void ym2612_run( int target) {
   int ym2612_prev_index = ym2612_index;
   ym2612_index += (target-ym2612_clock) / ym2612.divisor;
   if (ym2612_index > ym2612_prev_index) {
+    RG_ASSERT(ym2612_index <= GWENESIS_AUDIO_BUFFER_CAPACITY, "MD FM buffer overflow");
     YM2612Update(gwenesis_ym2612_buffer + ym2612_prev_index, ym2612_index-ym2612_prev_index);
     ym2612_clock = ym2612_index*ym2612.divisor;
 

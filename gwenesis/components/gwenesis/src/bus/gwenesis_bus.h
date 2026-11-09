@@ -23,6 +23,7 @@ __license__ = "GPLv3"
 
 #include <stdio.h>
 #include <string.h>
+#include <config.h>
 
 #define MAX_ROM_SIZE 0x800000
 #define MAX_RAM_SIZE 0x10000
@@ -43,13 +44,14 @@ __license__ = "GPLv3"
 #define GWENESIS_REFRESH_RATE_PAL 50
 #define GWENESIS_AUDIO_FREQ_PAL 52781
 
-#define GWENESIS_AUDIO_ACCURATE 1
+#define GWENESIS_AUDIO_ACCURATE (!RG_GWENESIS_LINE_AUDIO)
 
 #define Z80_FREQ_DIVISOR 14     // Frequency divisor to Z80 clock
 #define VDP_CYCLES_PER_LINE 3420// VDP Cycles per Line
 #define SCREEN_WIDTH 320
 
 #define AUDIO_FREQ_DIVISOR 1009
+#define GWENESIS_AUDIO_BUFFER_CAPACITY (LINES_PER_FRAME_PAL * VDP_CYCLES_PER_LINE / AUDIO_FREQ_DIVISOR + 2)
 #define GWENESIS_AUDIO_BUFFER_LENGTH_NTSC 888
 #define GWENESIS_AUDIO_BUFFER_LENGTH_PAL 1056
 

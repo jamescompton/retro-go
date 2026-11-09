@@ -8,6 +8,7 @@
 #define RG_GWENESIS_VIDEO_MEM       MEM_SLOW
 #define RG_PROFILE_BOOKMARKS        1
 #define RG_GWENESIS_YIELD_INTERVAL_MS 250
+#define RG_GWENESIS_LINE_AUDIO       1
 
 // Enable only for experimental firmware; overclocking can disrupt Bluetooth.
 #ifndef RG_ENABLE_DEV_MODE

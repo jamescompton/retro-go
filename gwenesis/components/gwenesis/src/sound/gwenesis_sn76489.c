@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
+#include <rg_system.h>
 #include "gwenesis_bus.h"
 #include "gwenesis_sn76489.h"
 #include "gwenesis_savestate.h"
@@ -212,6 +213,7 @@ if ( sn76489_clock >= target) return;
   int sn76489_prev_index = sn76489_index;
   sn76489_index += (target-sn76489_clock) / gwenesis_SN76489.divisor;
   if (sn76489_index > sn76489_prev_index) {
+    RG_ASSERT(sn76489_index <= GWENESIS_AUDIO_BUFFER_CAPACITY, "MD PSG buffer overflow");
     gwenesis_SN76489_Update(gwenesis_sn76489_buffer + sn76489_prev_index, sn76489_index-sn76489_prev_index);
     sn76489_clock = sn76489_index*gwenesis_SN76489.divisor;
   } else {
