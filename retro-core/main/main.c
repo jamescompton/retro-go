@@ -7,7 +7,9 @@ void app_main(void)
 
     RG_LOGI("configNs=%s", app->configNs);
 
-    if (strcmp(app->configNs, "gbc") == 0 || strcmp(app->configNs, "gb") == 0)
+    if (false) {}
+#if RG_3248_EMULATOR_SET != 2
+    else if (strcmp(app->configNs, "gbc") == 0 || strcmp(app->configNs, "gb") == 0)
         gbc_main();
     else if (strcmp(app->configNs, "nes") == 0)
         nes_main();
@@ -25,11 +27,16 @@ void app_main(void)
     else if (strcmp(app->configNs, "gw") == 0)
         gw_main();
 #endif
+#endif
+#if RG_3248_EMULATOR_SET != 1
     else if (strcmp(app->configNs, "snes") == 0)
         snes_main();
+#endif
+#if RG_3248_EMULATOR_SET != 2
 #ifndef __TINYC__
     else if (strcmp(app->configNs, "lnx") == 0)
         lynx_main();
+#endif
 #endif
     else
         launcher_main();

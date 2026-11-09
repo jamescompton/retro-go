@@ -83,13 +83,21 @@ def build_image(apps, output_file, img_type="odroid", fatsize=0, target="unknown
     args += [output_file]
 
     ota_next_id = 16
+    flash_end = 0x10000
     for app in apps:
         part = PROJECT_APPS[app]
+        app_file = os.path.join(app, "build", app + ".bin")
+        if target == "esp32-3248s035r":
+            if os.path.getsize(app_file) > part[2]:
+                raise ValueError(f"{app} exceeds its configured partition size")
+            flash_end += part[2]
+            if flash_end > 0x400000:
+                raise ValueError("Selected apps exceed the board's 4MB flash")
         subtype = part[1]
         if part[0] == 0 and (part[1] & 0xF0) == 0x10:  # Rewrite OTA indexes to maintain order
             subtype = ota_next_id
             ota_next_id += 1
-        args += [str(part[0]), str(subtype), str(part[2]), app, os.path.join(app, "build", app + ".bin")]
+        args += [str(part[0]), str(subtype), str(part[2]), app, app_file]
     if fatsize:
         args += ["1", "129", fatsize, "vfs", "none"]
 
@@ -120,6 +128,8 @@ def build_app(app, device_type, with_profiling=False, no_networking=False, is_re
     args.append(f"-DRG_BUILD_RELEASE={1 if is_release else 0}")
     args.append(f"-DRG_ENABLE_PROFILING={1 if with_profiling else 0}")
     args.append(f"-DRG_ENABLE_NETWORKING={0 if no_networking else 1}")
+    if device_type == "esp32-3248s035r":
+        args.append(f"-DRG_3248_EMULATOR_SET={emulator_set}")
     with open("partitions.csv", "w") as f:
         f.write("# This table isn't used, it's just needed to avoid esp-idf build failures.\n")
         f.write("dummy, app, ota_0, 65536, 3145728\n")

@@ -190,7 +190,9 @@ static void book_init(book_type_t book_type, const char *name, const char *desc,
 
 #if RG_PROFILE_BOOKMARKS
     // A reduced firmware set must not overwrite bookmarks for absent apps.
-    const char *profile = rg_system_have_app("gwenesis") ? "md" :
+    const char *profile = RG_3248_EMULATOR_SET == 1 ? "8bit" :
+                          RG_3248_EMULATOR_SET == 2 ? "16bit" :
+                          rg_system_have_app("gwenesis") ? "md" :
                           rg_system_have_app("prboom-go") ? "doom" : NULL;
     if (profile)
         snprintf(path, sizeof(path), "%s/%s-%s.txt", RG_BASE_PATH_CONFIG, name, profile);

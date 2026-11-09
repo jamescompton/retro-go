@@ -81,6 +81,10 @@
 #define RG_ENABLE_GAME_AND_WATCH 1
 #endif
 
+#ifndef RG_3248_EMULATOR_SET
+#define RG_3248_EMULATOR_SET 0
+#endif
+
 #ifndef RG_ENABLE_COLECOVISION
 #define RG_ENABLE_COLECOVISION 1
 #endif

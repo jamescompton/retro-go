@@ -3,6 +3,12 @@ set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/components")
 
 if(RG_BUILD_TARGET STREQUAL "RG_TARGET_ESP32_3248S035R")
     set(COMPONENTS "${COMPONENTS} bt esp_hid")
+    if(NOT DEFINED RG_3248_EMULATOR_SET)
+        set(RG_3248_EMULATOR_SET 0)
+    endif()
+    if(NOT RG_3248_EMULATOR_SET MATCHES "^[012]$")
+        message(FATAL_ERROR "RG_3248_EMULATOR_SET must be 0 (legacy), 1 (8-bit), or 2 (16-bit)")
+    endif()
 endif()
 
 macro(rg_setup_compile_options)
@@ -12,6 +18,9 @@ macro(rg_setup_compile_options)
         -fjump-tables -ftree-switch-conversion
         ${ARGV}
     )
+    if(RG_BUILD_TARGET STREQUAL "RG_TARGET_ESP32_3248S035R")
+        component_compile_options(-DRG_3248_EMULATOR_SET=${RG_3248_EMULATOR_SET})
+    endif()
 
     # The PSRAM cache bug is responsible for many subtile bugs and crashes. The workaround has a
     # significant performance impact but the alternative is instability... Enabling the fix here

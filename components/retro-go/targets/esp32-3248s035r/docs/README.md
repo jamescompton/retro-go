@@ -2,15 +2,21 @@
 
 Target for the resistive-touch Sunton ESP32-3248S035R (CYD) with the ESP-PSRAM64H U4 modification documented in the user's hardware notes.
 
-## Firmware sets (x51)
+## Firmware sets (x54)
 
-The board has **4 MB flash**, independently verified with `esptool flash_id`; its PSRAM does not increase firmware storage. The Bluetooth-enabled launcher, retro-core and Doom already exceed 4 MB together, before Mega Drive. Use separate firmware sets instead of trying to install all apps at once:
+The board has **4 MB flash**, independently verified with `esptool flash_id`; its PSRAM does not increase firmware storage. x54 splits retro-core at compile time, not just by hiding launcher tabs, to fit SNES alongside Mega Drive:
 
 | `RG_3248_PROFILE` | Apps | Systems available |
 |---|---|---|
-| `core` (default) | launcher + retro-core | GB, GBC, NES/FDS, SNES, GG, SMS, PCE, Lynx |
-| `md` | launcher + gwenesis | Mega Drive / Genesis (`md` ROM folder) |
+| `8bit` (default) | launcher + reduced retro-core | GB, GBC, NES/FDS, GG, SMS, PCE, Lynx |
+| `16bit` | launcher + SNES-only retro-core + gwenesis | SNES, Mega Drive / Genesis (`md` ROM folder) |
 | `doom` | launcher + prboom-go | Doom |
+| `core` (legacy) | launcher + full retro-core | Original x51 Core grouping, including SNES |
+| `md` (legacy) | launcher + gwenesis | Original MD-only grouping |
+
+PCE is deliberately grouped with the 8-bit set. Bluetooth, PSRAM, networking, controls and emulator/audio tuning are retained; reorganizing the sets is not an audio-performance fix. In particular, MD retains the experimental x53 mixer described below. Sound options remain user-controlled. x54 has been built but not flashed or runtime-tested.
+
+Persistent images in the repository root are `retro-go_1.46-classic-x54-8bit_esp32-3248s035r.img`, `retro-go_1.46-classic-x54-16bit_esp32-3248s035r.img`, and `retro-go_1.46-classic-x54-doom_esp32-3248s035r.img`. `retro-go_1.46-classic-x54-profiles_esp32-3248s035r.zip` contains those images, per-set partition tables and exact app binaries, and a manifest of offsets, sizes and SHA-256 hashes. Older recovery images are preserved.
 
 Game & Watch and ColecoVision are disabled in this target's launcher and dispatch. Other targets retain them. MSX is deliberately excluded from these sets. x51 preserves x50's emulator/audio tuning, Bluetooth, PSRAM, wired joystick and touch settings. Mega Drive's 64 KB M68K work RAM is placed in PSRAM to fit alongside Bluetooth; other targets retain their original placement. Mega Drive and Doom performance require separate hardware testing; their presence is not a full-speed compatibility claim.
 
@@ -39,16 +45,37 @@ The published [ESP32-3248S035 MCU V1.1 schematic](https://github.com/rzeldent/pl
 In an ESP-IDF 5.2 PowerShell environment, select one profile and use `all` so the target chooses the correct apps:
 
 ```powershell
-$env:RG_3248_PROFILE = 'md' # core, md or doom
-$env:PROJECT_VER = "1.46-classic-x51-$env:RG_3248_PROFILE"
+$env:RG_3248_PROFILE = '8bit' # 8bit, 16bit or doom
+$env:PROJECT_VER = "1.46-classic-x54-$env:RG_3248_PROFILE"
 python rg_tool.py --target=esp32-3248s035r build-img all
 ```
 
-Each set has a `0x170000` launcher slot at `0x10000` and a `0x170000` emulator slot at `0x180000`. **Switching sets requires updating the partition table's emulator label** as well as that slot's firmware. Copying an MD binary into a partition still named `retro-core` will not make the launcher show MD. Return to the launcher before switching sets. Do not mix a set's table with another set's emulator binary.
+The 8-bit and Doom sets have a `0x170000` launcher slot at `0x10000` and a `0x170000` emulator slot at `0x180000`. The 16-bit layout is:
+
+| App | Offset | Slot size |
+|---|---|---|
+| launcher | `0x10000` | `0x170000` |
+| retro-core (SNES only) | `0x180000` | `0x110000` |
+| gwenesis | `0x290000` | `0x170000` |
+
+The 16-bit partitions end at `0x400000`, using all 4 MB of flash. The `.img` additionally has a 256-byte updater metadata footer, not a flash partition. Packaging rejects oversized app payloads or an app layout extending beyond 4 MB rather than relying on mkfw's automatic partition enlargement.
+
+**Switching sets requires the matching partition table and all apps**, not just the emulator binary. Copying an MD binary into a partition still named `retro-core` will not make the launcher show MD. Return to the launcher before switching sets. Do not mix a set's table with another set's emulator binary.
 
 For an existing board, preserve NVS (`0x9000`), OTA selection (`0xD000`), PHY data (`0xF000`) and SD contents: verify the device MAC and current partition layout, then write only the selected set's partition table at `0x8000`, launcher and emulator app. Obtain approval before changing the partition table. **Do not flash the complete `.img` over an existing installation**: it contains blank NVS/OTA regions and would erase pairing data. A normal app-only update within the same set does not require changing the table. The original x50 image remains a separate recovery artifact.
 
-Settings, ROMs and saves on SD are shared across sets. Core keeps the original `favorite.txt` and `recent.txt` bookmark lists. MD and Doom use `favorite-md.txt` / `recent-md.txt` and `favorite-doom.txt` / `recent-doom.txt` in `retro-go\config` so playing an extra set does not overwrite bookmarks for temporarily absent Core apps. GB/GBC BIOS enable settings are per namespace (`retro-go\config\gb.json` and `gbc.json`, numeric `LoadBIOS: 1`); BIOS files belong in `retro-go\bios`, not `roms\bios`. MD cartridges and Doom do not use external console BIOS files.
+After approval, extract the archive, confirm the board MAC is `68:09:47:f7:06:8c` (COM28 at last verification, but ports can change), and run the matching command from the extracted archive in an ESP-IDF environment:
+
+```powershell
+# 8-bit:
+python -m esptool --chip esp32 --port COM28 --baud 115200 write_flash 0x8000 8bit\partitions.bin 0x10000 8bit\launcher.bin 0x180000 8bit\retro-core.bin
+# 16-bit:
+python -m esptool --chip esp32 --port COM28 --baud 115200 write_flash 0x8000 16bit\partitions.bin 0x10000 16bit\launcher.bin 0x180000 16bit\retro-core.bin 0x290000 16bit\gwenesis.bin
+# Doom:
+python -m esptool --chip esp32 --port COM28 --baud 115200 write_flash 0x8000 doom\partitions.bin 0x10000 doom\launcher.bin 0x180000 doom\prboom-go.bin
+```
+
+Settings, ROMs and saves on SD are shared across sets. The new sets use `favorite-8bit.txt` / `recent-8bit.txt` and `favorite-16bit.txt` / `recent-16bit.txt` in `retro-go\config`. They start empty, leaving the old Core and MD lists intact rather than overwriting lists containing temporarily unavailable systems. Legacy Core keeps `favorite.txt` / `recent.txt`; legacy MD and Doom retain their `-md` and `-doom` suffixes. GB/GBC BIOS enable settings are per namespace (`retro-go\config\gb.json` and `gbc.json`, numeric `LoadBIOS: 1`); BIOS files belong in `retro-go\bios`, not `roms\bios`. MD cartridges and Doom do not use external console BIOS files.
 
 ## Photos
 

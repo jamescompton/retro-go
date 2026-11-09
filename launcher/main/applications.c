@@ -689,8 +689,13 @@ static void application(const char *desc, const char *name, const char *exts, co
 
 void applications_init(void)
 {
+#if RG_3248_EMULATOR_SET != 2
     application("Nintendo Entertainment System", "nes", "nes fc fds nsf zip", "retro-core", 16);
+#endif
+#if RG_3248_EMULATOR_SET != 1
     application("Super Nintendo", "snes", "smc sfc zip", "retro-core", 0);
+#endif
+#if RG_3248_EMULATOR_SET != 2
     application("Nintendo Gameboy", "gb", "gb gbc zip", "retro-core", 0);
     application("Nintendo Gameboy Color", "gbc", "gbc gb zip", "retro-core", 0);
     application("Nintendo Gameboy Advance", "gba", "gba zip", "gbsp", 0);
@@ -700,12 +705,15 @@ void applications_init(void)
     // application("Sega SG-1000", "sg1", "sms sg sg1", "retro-core", 0);
     application("Sega Master System", "sms", "sms sg zip", "retro-core", 0);
     application("Sega Game Gear", "gg", "gg zip", "retro-core", 0);
+#endif
     application("Sega Mega Drive", "md", "md gen bin zip", "gwenesis", 0);
 #if RG_ENABLE_COLECOVISION
     application("Coleco ColecoVision", "col", "col rom zip", "retro-core", 0);
 #endif
+#if RG_3248_EMULATOR_SET != 2
     application("NEC PC Engine", "pce", "pce zip", "retro-core", 0);
     application("Atari Lynx", "lnx", "lnx zip", "retro-core", 64);
+#endif
     // application("Atari 2600", "a26", "a26 zip", "stella-go", 0);
     // application("Neo Geo Pocket Color", "ngp", "ngp ngc zip", "ngpocket-go", 0);
     application("DOOM", "doom", "wad zip", "prboom-go", 0);
