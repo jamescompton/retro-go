@@ -694,12 +694,16 @@ void applications_init(void)
     application("Nintendo Gameboy", "gb", "gb gbc zip", "retro-core", 0);
     application("Nintendo Gameboy Color", "gbc", "gbc gb zip", "retro-core", 0);
     application("Nintendo Gameboy Advance", "gba", "gba zip", "gbsp", 0);
+#if RG_ENABLE_GAME_AND_WATCH
     application("Nintendo Game & Watch", "gw", "gw", "retro-core", 0);
+#endif
     // application("Sega SG-1000", "sg1", "sms sg sg1", "retro-core", 0);
     application("Sega Master System", "sms", "sms sg zip", "retro-core", 0);
     application("Sega Game Gear", "gg", "gg zip", "retro-core", 0);
     application("Sega Mega Drive", "md", "md gen bin zip", "gwenesis", 0);
+#if RG_ENABLE_COLECOVISION
     application("Coleco ColecoVision", "col", "col rom zip", "retro-core", 0);
+#endif
     application("NEC PC Engine", "pce", "pce zip", "retro-core", 0);
     application("Atari Lynx", "lnx", "lnx zip", "retro-core", 64);
     // application("Atari 2600", "a26", "a26 zip", "stella-go", 0);

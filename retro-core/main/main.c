@@ -17,10 +17,14 @@ void app_main(void)
         sms_main();
     else if (strcmp(app->configNs, "gg") == 0)
         sms_main();
+#if RG_ENABLE_COLECOVISION
     else if (strcmp(app->configNs, "col") == 0)
         sms_main();
+#endif
+#if RG_ENABLE_GAME_AND_WATCH
     else if (strcmp(app->configNs, "gw") == 0)
         gw_main();
+#endif
     else if (strcmp(app->configNs, "snes") == 0)
         snes_main();
 #ifndef __TINYC__

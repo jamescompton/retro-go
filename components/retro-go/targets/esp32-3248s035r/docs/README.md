@@ -2,6 +2,42 @@
 
 Target for the resistive-touch Sunton ESP32-3248S035R (CYD) with the ESP-PSRAM64H U4 modification documented in the user's hardware notes.
 
+## Firmware sets (x51)
+
+The board has **4 MB flash**, independently verified with `esptool flash_id`; its PSRAM does not increase firmware storage. The Bluetooth-enabled launcher, retro-core and Doom already exceed 4 MB together, before Mega Drive. Use separate firmware sets instead of trying to install all apps at once:
+
+| `RG_3248_PROFILE` | Apps | Systems available |
+|---|---|---|
+| `core` (default) | launcher + retro-core | GB, GBC, NES/FDS, SNES, GG, SMS, PCE, Lynx |
+| `md` | launcher + gwenesis | Mega Drive / Genesis (`md` ROM folder) |
+| `doom` | launcher + prboom-go | Doom |
+
+Game & Watch and ColecoVision are disabled in this target's launcher and dispatch. Other targets retain them. MSX is deliberately excluded from these sets. x51 preserves x50's emulator/audio tuning, Bluetooth, PSRAM, wired joystick and touch settings. Mega Drive's 64 KB M68K work RAM is placed in PSRAM to fit alongside Bluetooth; other targets retain their original placement. Mega Drive and Doom performance require separate hardware testing; their presence is not a full-speed compatibility claim.
+
+The MD launcher and a user-selected game booted on the verified board, with SD mounting and PSRAM testing successfully. The user reported it "runs perfect without audio". The initial game capture exposed watchdog starvation when audio was disabled/nonblocking; this target yields for one scheduler tick every 250 ms so the idle task can run. Performance with audio enabled and broader ROM compatibility remain unverified.
+
+### MD memory headroom (x52)
+
+The user reported memory exhaustion when enabling audio. x51 gameplay had only 6-7 KB internal heap free despite more than 3 MB free PSRAM; the exact allocation failure was not reproduced during capture. x52 places MD's video surface, VRAM, synthesis sample buffers and LFO lookup table in PSRAM, alongside the M68K work RAM. Internal DAC DMA buffers remain internal. This placement is target-only.
+
+x52 was app-only flashed to the verified board (MAC `68:09:47:f7:06:8c`, COM28), with both hashes verified, preserving NVS and the already-approved MD partition table. Boot confirmed x52, SD mounting, loaded touch calibration and a successful PSRAM test. Gameplay with audio held approximately 89-91 KB internal heap free (largest block 88 KB) and about 3.4 MB PSRAM free, with no allocation failures or watchdog warnings in the 35-second capture. This confirms recovered headroom, not proof that the original intermittent failure can never recur.
+
+Audio-enabled gameplay remains CPU-limited: roughly 26-42 simulated FPS at 96-99% busy in the captured scenes, with only 11-19K samples/sec versus the approximately 26.6K target. The memory change is not an audio-speed fix. The wired joystick was not responding on I2C during this test; Bluetooth input reports were observed. x51 Core and Doom artifacts remain available; x52 is an MD-only update.
+
+In an ESP-IDF 5.2 PowerShell environment, select one profile and use `all` so the target chooses the correct apps:
+
+```powershell
+$env:RG_3248_PROFILE = 'md' # core, md or doom
+$env:PROJECT_VER = "1.46-classic-x51-$env:RG_3248_PROFILE"
+python rg_tool.py --target=esp32-3248s035r build-img all
+```
+
+Each set has a `0x170000` launcher slot at `0x10000` and a `0x170000` emulator slot at `0x180000`. **Switching sets requires updating the partition table's emulator label** as well as that slot's firmware. Copying an MD binary into a partition still named `retro-core` will not make the launcher show MD. Return to the launcher before switching sets. Do not mix a set's table with another set's emulator binary.
+
+For an existing board, preserve NVS (`0x9000`), OTA selection (`0xD000`), PHY data (`0xF000`) and SD contents: verify the device MAC and current partition layout, then write only the selected set's partition table at `0x8000`, launcher and emulator app. Obtain approval before changing the partition table. **Do not flash the complete `.img` over an existing installation**: it contains blank NVS/OTA regions and would erase pairing data. A normal app-only update within the same set does not require changing the table. The original x50 image remains a separate recovery artifact.
+
+Settings, ROMs and saves on SD are shared across sets. Core keeps the original `favorite.txt` and `recent.txt` bookmark lists. MD and Doom use `favorite-md.txt` / `recent-md.txt` and `favorite-doom.txt` / `recent-doom.txt` in `retro-go\config` so playing an extra set does not overwrite bookmarks for temporarily absent Core apps. GB/GBC BIOS enable settings are per namespace (`retro-go\config\gb.json` and `gbc.json`, numeric `LoadBIOS: 1`); BIOS files belong in `retro-go\bios`, not `roms\bios`. MD cartridges and Doom do not use external console BIOS files.
+
 ## Photos
 
 The board running Retro-Go, with the wired NULLLAB Mini-Joystick (I²C) and ShanWan Q36 Bluetooth controllers.

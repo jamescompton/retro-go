@@ -1,6 +1,13 @@
 // Target definition
 #define RG_TARGET_NAME             "ESP32-3248S035R"
 #define RG_DEFAULT_STARTUP_MODE     1
+#define RG_ENABLE_GAME_AND_WATCH    0
+#define RG_ENABLE_COLECOVISION      0
+// Keep the 64KB Mega Drive work RAM out of Bluetooth's internal SRAM.
+#define RG_GWENESIS_RAM_ATTR        EXT_RAM_BSS_ATTR
+#define RG_GWENESIS_VIDEO_MEM       MEM_SLOW
+#define RG_PROFILE_BOOKMARKS        1
+#define RG_GWENESIS_YIELD_INTERVAL_MS 250
 
 // Enable only for experimental firmware; overclocking can disrupt Bluetooth.
 #ifndef RG_ENABLE_DEV_MODE

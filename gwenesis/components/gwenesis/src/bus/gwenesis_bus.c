@@ -21,6 +21,7 @@ __license__ = "GPLv3"
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
+#include <rg_system.h>
 
 #include "m68k.h"
 
@@ -65,7 +66,7 @@ unsigned char *M68K_RAM=(void *)(uint32_t)(0); // 68K RAM
 #else
 
 unsigned char *ROM_DATA; // 68K Main Program (uncompressed)
-unsigned char M68K_RAM[MAX_RAM_SIZE];    // 68K RAM
+RG_GWENESIS_RAM_ATTR unsigned char M68K_RAM[MAX_RAM_SIZE];    // 68K RAM
 #endif
 
 

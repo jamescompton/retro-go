@@ -135,6 +135,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <rg_system.h>
 
 #include "ym2612.h"
 #include "gwenesis_bus.h"
@@ -506,9 +507,9 @@ static const UINT8 lfo_pm_output[7*8][8]={
 
 /* all 128 LFO PM waveforms */
 #if GW_TARGET
-static UINT8 lfo_pm_table[128*8*16];  /* 128 combinations of 7 bits meaningful (of F-NUMBER), 8 LFO depths, 32 LFO output levels per one depth */
+static RG_GWENESIS_RAM_ATTR UINT8 lfo_pm_table[128*8*16];  /* 128 combinations of 7 bits meaningful (of F-NUMBER), 8 LFO depths, 32 LFO output levels per one depth */
 #else
-static INT32 lfo_pm_table[128*8*32] ;  /* 128 combinations of 7 bits meaningful (of F-NUMBER), 8 LFO depths, 32 LFO output levels per one depth */
+static RG_GWENESIS_RAM_ATTR INT32 lfo_pm_table[128*8*32] ;  /* 128 combinations of 7 bits meaningful (of F-NUMBER), 8 LFO depths, 32 LFO output levels per one depth */
 #endif
 
 /* register number to channel number , slot offset */

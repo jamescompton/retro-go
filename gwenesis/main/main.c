@@ -12,10 +12,10 @@ extern int zclk;
 int system_clock;
 int scan_line;
 
-int16_t gwenesis_sn76489_buffer[AUDIO_BUFFER_LENGTH];
+RG_GWENESIS_RAM_ATTR int16_t gwenesis_sn76489_buffer[AUDIO_BUFFER_LENGTH];
 int sn76489_index;
 int sn76489_clock;
-int16_t gwenesis_ym2612_buffer[AUDIO_BUFFER_LENGTH];
+RG_GWENESIS_RAM_ATTR int16_t gwenesis_ym2612_buffer[AUDIO_BUFFER_LENGTH];
 int ym2612_index;
 int ym2612_clock;
 
@@ -214,7 +214,7 @@ void app_main(void)
     sn76489_enabled = rg_settings_get_number(NS_APP, SETTING_SN76489_EMULATION, 0);
     z80_enabled = rg_settings_get_number(NS_APP, SETTING_Z80_EMULATION, 1);
 
-    updates[0] = rg_surface_create(320, 241, RG_PIXEL_PAL565_BE, MEM_FAST);
+    updates[0] = rg_surface_create(320, 241, RG_PIXEL_PAL565_BE, RG_GWENESIS_VIDEO_MEM);
     // updates[1] = rg_surface_create(320, 241, RG_PIXEL_PAL565_BE, MEM_FAST);
     currentUpdate = updates[0];
 
@@ -224,7 +224,7 @@ void app_main(void)
     // updates[1]->data += 160;
     // updates[1]->height = 240;
 
-    VRAM = rg_alloc(VRAM_MAX_SIZE, MEM_FAST);
+    VRAM = rg_alloc(VRAM_MAX_SIZE, RG_GWENESIS_VIDEO_MEM);
 
     RG_LOGI("Genesis start\n");
 
@@ -269,6 +269,9 @@ void app_main(void)
     uint32_t joystick = 0, joystick_old;
 
     int skipFrames = 0;
+#if RG_GWENESIS_YIELD_INTERVAL_MS
+    int64_t nextYield = 0;
+#endif
 
     RG_LOGI("emulation loop\n");
     while (true)
@@ -417,5 +420,13 @@ void app_main(void)
         {
             skipFrames--;
         }
+#if RG_GWENESIS_YIELD_INTERVAL_MS
+        // Audio can return without blocking, especially with sound disabled.
+        if (rg_system_timer() >= nextYield)
+        {
+            rg_task_delay((1000 + RG_TICK_RATE - 1) / RG_TICK_RATE);
+            nextYield = rg_system_timer() + RG_GWENESIS_YIELD_INTERVAL_MS * 1000;
+        }
+#endif
     }
 }
