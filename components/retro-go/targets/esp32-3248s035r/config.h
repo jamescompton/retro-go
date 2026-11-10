@@ -25,6 +25,13 @@
 #define RG_STORAGE_SDSPI_HOST       SPI3_HOST
 #define RG_STORAGE_SDSPI_SPEED      SDMMC_FREQ_DEFAULT
 
+// Battery: external 1 kOhm / 1 kOhm divider on GPIO35.
+#define RG_BATTERY_DRIVER           1
+#define RG_BATTERY_ADC_UNIT         ADC_UNIT_1
+#define RG_BATTERY_ADC_CHANNEL      ADC_CHANNEL_7
+#define RG_BATTERY_CALC_PERCENT(raw) (((raw) * 2.f - 3500.f) / (4200.f - 3500.f) * 100.f)
+#define RG_BATTERY_CALC_VOLTAGE(raw) ((raw) * 2.f * 0.001f)
+
 // Audio
 #define RG_AUDIO_USE_INT_DAC        2
 #define RG_AUDIO_USE_EXT_DAC        0

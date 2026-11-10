@@ -1,6 +1,6 @@
 # ESP32-3248S035R
 
-Target for the resistive-touch Sunton ESP32-3248S035R (CYD) with the ESP-PSRAM64H U4 modification documented in the user's hardware notes.
+Target for the resistive-touch Sunton ESP32-3248S035R (CYD) with the ESP-PSRAM64H U4 modification. This guide describes the user's modified USB-C board, not the NM-CYD-C5. See [hardware and wiring](#hardware-and-wiring) for the controller, required PSRAM modification, battery and external charging module.
 
 ## Firmware sets (x54)
 
@@ -14,7 +14,7 @@ The board has **4 MB flash**, independently verified with `esptool flash_id`; it
 | `core` (legacy) | launcher + full retro-core | Original x51 Core grouping, including SNES |
 | `md` (legacy) | launcher + gwenesis | Original MD-only grouping |
 
-PCE is deliberately grouped with the 8-bit set. Bluetooth, PSRAM, networking, controls and emulator/audio tuning are retained; reorganizing the sets is not an audio-performance fix. In particular, MD retains the experimental x53 mixer described below. Sound options remain user-controlled. x54 has been built but not flashed or runtime-tested.
+PCE is deliberately grouped with the 8-bit set. Bluetooth, PSRAM, networking, controls and emulator/audio tuning are retained; reorganizing the sets is not an audio-performance fix. In particular, MD retains the experimental x53 mixer described below. Sound options remain user-controlled. The x54 8-bit set was flashed and booted; x55 is its installed battery-sensing update. The x54 16-bit and Doom sets were built but have not been runtime-tested.
 
 Persistent images in the repository root are `retro-go_1.46-classic-x54-8bit_esp32-3248s035r.img`, `retro-go_1.46-classic-x54-16bit_esp32-3248s035r.img`, and `retro-go_1.46-classic-x54-doom_esp32-3248s035r.img`. `retro-go_1.46-classic-x54-profiles_esp32-3248s035r.zip` contains those images, per-set partition tables and exact app binaries, and a manifest of offsets, sizes and SHA-256 hashes. Older recovery images are preserved.
 
@@ -40,7 +40,15 @@ The approved app-only flash and boot were verified on the same board. Combined F
 
 ### Battery indication
 
-The published [ESP32-3248S035 MCU V1.1 schematic](https://github.com/rzeldent/platformio-espressif32-sunton/blob/main/assets/schematics/ESP32-3248S035-MCU-V1.1.jpg) shows no onboard battery charger or battery-voltage sense connection. GPIO34 measures the light sensor network, not battery voltage. The existing Retro-Go battery icon cannot show a meaningful level without added sensing hardware; it remains unavailable by user choice. An added voltage divider only measures voltage and does not provide lithium-cell charging or protection. Confirm the external power/charging circuitry before adding sense wiring.
+The user's USB-C board revision has a BAT1 connector and FM5324HJ1 power-management IC; the older MCU V1.1 schematic does not describe that charging circuit. Its factory battery-to-ADC routing has not been established. GPIO34 measures the light sensor network, not battery voltage.
+
+The x55 8-bit build enables the existing calibrated ADC battery driver on **GPIO35 (ADC1 channel 7)** for the user's added divider: **BAT+ -> 1 kOhm -> GPIO35 -> 1 kOhm -> GND**. ADC millivolts are multiplied by two. The battery percentage uses the existing target convention of a clamped linear estimate from 3.50 V (0%) to 4.20 V (100%); it is not a fuel gauge or a charging-status detector. Runtime voltage accuracy still needs comparison against a multimeter.
+
+This configuration requires the divider; never connect BAT+ directly to GPIO35. At 4.20 V the divider supplies 2.10 V to the ADC and continuously draws 2.10 mA from the battery. It provides neither charging nor protection, and an always-connected divider can feed an unpowered ESP32 input when the board is off. Disconnect the battery when servicing the board.
+
+The updated artifact is `retro-go_1.46-classic-x55-8bit_esp32-3248s035r.img`. The x54 images remain unchanged. The shared target configuration also enables sensing in any future rebuild of other profiles.
+
+x55 was flashed app-only to the verified board (base MAC `68:09:47:f7:06:8c`) after confirming its installed partition table matched. Boot reached the launcher, initialized the ADC battery driver, passed the PSRAM test and reconnected the saved Classic controller. Battery telemetry reported 4.240 V while USB was connected; this is an ADC estimate, not a multimeter-confirmed cell voltage. Existing joystick I2C and NVS calibration/storage warnings remain.
 
 In an ESP-IDF 5.2 PowerShell environment, select one profile and use `all` so the target chooses the correct apps:
 
@@ -87,6 +95,135 @@ The board running Retro-Go, with the wired NULLLAB Mini-Joystick (I²C) and Shan
 
 ![Launcher Game Boy Color list with preview](photo-3-launcher-gbc.jpg)
 
+## Hardware and wiring
+
+These are the current build connections, separate from the historical experiments below. GPIO assignments are taken from `config.h`, the production Mini-Joystick decoder in `rg_input.c`, the recorded PSRAM modification and hardware checks. Connector net labels follow the [USB-C revision pinout](https://github.com/chacuavip10/CYD-3.5inch_ESP32-3248S035/blob/master/Docs/GPIO_PINOUT_TypeC.png). Do not identify signals by wire colour or transfer a connector's left/right order to a board viewed from the opposite side.
+
+![Modified ESP32-3248S035R board with PSRAM at U4 and added wiring](photo-4-board-wiring.jpg)
+
+*User's board, 10 November 2026: BAT1 is at the upper left; the fitted eight-pin PSRAM and pull-up are beside the ESP32 module; controller and sense wiring run to the lower connector area. This is an as-built reference, not a pad-by-pad tracing image: glue, sleeving and crossing wires obscure some connections.*
+
+### Wired controller: NULLLAB Mini-Joystick
+
+The controller is an **I2C peripheral at address `0x5A`**, not a set of buttons wired individually to ESP32 GPIOs. The firmware uses **SDA GPIO21 / SCL GPIO22, 100 kHz**. During the original hookup, power and ground were taken separately from CN1. Both P3 and CN1 expose the same I2C nets, so label-based routing is:
+
+| Controller terminal | Board connection | Notes |
+|---|---|---|
+| VCC | CN1 3V3 | Regulated 3.3 V, not raw BAT+ or USB 5 V |
+| GND | CN1 GND | Common ground with the board |
+| SDA | P3 IO21 or CN1 IO21 | GPIO21; use one connection, not both |
+| SCL | P3 IO22 or CN1 IO22 | GPIO22; use one connection, not both |
+
+```mermaid
+flowchart LR
+    subgraph Board["ESP32-3248S035R: identify by net label"]
+        V["CN1: 3V3"]
+        G["CN1: GND"]
+        D["P3 IO21 / CN1 IO21"]
+        C["P3 IO22 / CN1 IO22"]
+        S["P3: IO35"]
+    end
+    subgraph Pad["NULLLAB Mini-Joystick: I2C 0x5A"]
+        PV["VCC"]
+        PG["GND"]
+        PD["SDA"]
+        PC["SCL"]
+    end
+    V --> PV
+    G --- PG
+    D --- PD
+    C --- PC
+    S --- Sense["Optional battery sense only; not a controller signal"]
+```
+
+The reference pinout lists **P3: GND / IO35 / IO22 / IO21** and **CN1: GND / IO22 / IO21 / 3V3**. Those are reference drawing sequences, not instructions to count from the left in the photos. Confirm the board's labels/orientation before connecting.
+
+Final physical button mapping (x35 onward, retained in x55):
+
+| Physical control | I2C register | Retro-Go action |
+|---|---|---|
+| Red A | `0x21` | A |
+| White B | `0x23` | B |
+| Blue X | `0x24` | Select |
+| Yellow Y | `0x22` | Start |
+| Stick-click | `0x20` | Menu |
+| Stick horizontal | `0x10` | Low X = Left; high X = Right |
+| Stick vertical | `0x11` | High Y = Up; low Y = Down |
+
+Manufacturer A/B/C/D register names do not match these physical face labels. The earlier x31 mapping is superseded; do not use it as wiring or button-layout guidance. Wired, Q36 Bluetooth and touchscreen input combine into Player 1. The original controller hookup was user-tested successfully; later captures, including x55 startup, reported the module not responding. The pin assignment is unchanged, but these photos alone do not revalidate the current controller connection.
+
+### Required PSRAM modification
+
+**This firmware requires working PSRAM.** The fitted part is **ESP-PSRAM64H, 64 Mbit / 8 MB, 3.3 V**, installed at the formerly empty **U4 SOIC-8 footprint** (the recorded "Option 2" modification). The original ESP32 maps **4 MB** of that part; boot detection and the memory test passed. The board still has only **4 MB flash**.
+
+The footprint shares the flash data bus. Its original chip-select and clock connections cannot simply be left attached to the PSRAM. **Isolate U4 pins 1 and 6 from their original footprint nets**, then connect them to GPIO16 and GPIO17 respectively. The modification notes describe cutting the original traces; isolation is the required result. Remove **LED1 (RGB LED)** because its blue/green channels conflict with GPIO16/GPIO17. Do not retain the LED and try to share those signals.
+
+| ESP-PSRAM64H pin | Signal | Connection in this modification |
+|---|---|---|
+| 1 | CE# / CS# | Isolate original footprint net; bodge to GPIO16 |
+| 2 | SIO1 | Existing U4 shared flash-data connection |
+| 3 | SIO2 | Existing U4 shared flash-data connection |
+| 4 | VSS | Existing U4 GND |
+| 5 | SIO0 | Existing U4 shared flash-data connection |
+| 6 | SCLK | Isolate original footprint net; bodge to GPIO17 |
+| 7 | SIO3 | Existing U4 shared flash-data connection |
+| 8 | VDD | Existing U4 3.3 V |
+
+Fit the **10 kOhm pull-up between PSRAM pins 1 and 8** (CE# to 3.3 V). Pins 2, 3, 4, 5, 7 and 8 retain their footprint connections; they are not extra controller wires.
+
+```mermaid
+flowchart LR
+    V["3.3 V / U4 pin 8"] --- R["10 kOhm pull-up"]
+    R --- CS["U4 pin 1: CE#"]
+    IO16["ESP32 GPIO16"] --- CS
+    IO17["ESP32 GPIO17"] --- CLK["U4 pin 6: SCLK"]
+    BUS["Existing U4 flash-data nets"] --- DATA["U4 pins 2, 3, 5, 7"]
+    GND["Board GND"] --- PGND["U4 pin 4: VSS"]
+    NOTE["Pins 1 and 6 isolated from original nets; LED1 removed"]
+```
+
+This is a logical wiring diagram, not a physical chip orientation drawing. Locate pin 1 using the package mark and footprint reference, and check isolation/shorts with all power removed before powering up. Keep the high-speed bodge connections short. Firmware selects Quad SPI PSRAM at 80 MHz, initializes it at boot and runs a memory test; missing PSRAM is not silently ignored. DMA audio buffers still use internal SRAM.
+
+### Battery, external charging module and power button
+
+![Open enclosure showing battery assembly, external module, speaker and modified board](photo-5-enclosure-power.jpg)
+
+*User's open enclosure, 10 November 2026: two parallel-connected batteries below the speaker, external module at the upper right, modified board below. Battery specifications and parallel topology are user-confirmed; module labels and some terminal connections are not readable.*
+
+The user's **USB-C revision already has a BAT1 connector and FM5324HJ1 onboard power-management IC**. This differs from older no-charger schematics. The user reports that **connecting USB turns off the battery-powered path on this particular board**, preventing normal power-button on/off behaviour while USB is connected. For the user's desired behaviour, the build adds an **external charging module and battery**. This is a revision-specific observation and build choice, not a claim that every 3248S035 needs an external charger.
+
+The user confirms that **both USB connections can be used simultaneously in this assembled build**: when onboard USB is connected, the board disconnects the battery-powered path, while the external module provides the separate battery-charging connection. Using the external charging USB without onboard USB retains the desired battery-powered on/off behaviour. This records the user's confirmation for this revision and wiring, not an independently measured isolation specification or a guarantee for other board/module combinations.
+
+The user confirms **two 3.7 V, 550 mAh batteries connected in parallel (1S2P)**: **3.7 V nominal, 1100 mAh nominal combined capacity**, not 7.4 V. Both batteries share positive and negative connections. The external module's model, charge-current setting, protection features and exact terminal routing are **not confirmed**. Parallel topology alone does not establish suitable charge current or protection.
+
+The required functions are shown below; dashed links are a **functional overview, not a terminal-level installation diagram**:
+
+```mermaid
+flowchart LR
+    USB["External charging input"] -.-> CHG["External module: model and ratings unconfirmed"]
+    CHG -.-> BAT["Battery: 1S2P, 3.7 V, 1100 mAh nominal"]
+    BAT -.-> POWER["Board battery-power path / power button"]
+    POWER -.-> BOARD["ESP32-3248S035R"]
+    BAT -.-> SENSE["Optional voltage divider to GPIO35"]
+```
+
+Before reproducing this power arrangement, identify the module and its input, battery and load terminals from its own documentation, confirm battery voltage/topology and allowable charge current, and check whether it supports powering the load while charging. **The photos do not establish whether module load outputs go to BAT1 or another board input.** Simultaneous USB use on the user's assembled build is confirmed above; reproducing that behaviour on another revision or with different wiring requires checking its power-path arrangement. No module-specific hookup is prescribed here until those details are known.
+
+### Optional battery sense: current x55 wiring
+
+The final confirmed added sense connection remains **two 1 kOhm resistors with GPIO35 at their junction**:
+
+```text
+Battery positive ---- 1 kOhm ----+---- 1 kOhm ---- common GND
+                                |
+                           P3 IO35
+                       ESP32 ADC1_CH7
+```
+
+This optional line only measures voltage; it does not switch power, charge the battery or detect charging status. At 4.20 V battery voltage it supplies 2.10 V to GPIO35 and draws 2.10 mA continuously. x55 doubles calibrated ADC millivolts; the percentage is only a linear estimate (see [battery indication](#battery-indication)). x55 boot reported 4.240 V with USB connected, not yet compared against a meter.
+
+**Never connect battery positive directly to GPIO35.** An always-connected divider can feed an unpowered ESP32 input when the board is off. The documented divider assumes a single-cell voltage range; do not attach it to an unverified higher-voltage pack. Battery monitoring is optional hardware, but **the prebuilt x55 enables this input**: a build without the divider should disable the ADC battery driver rather than treat a floating input as a battery measurement. Original x54 images have battery sensing disabled. Factory onboard sensing remains unresolved; neither the later schematic discussion nor the Bruce investigation established an alternative connection, and no such alternative has replaced this divider.
+
 ## Working baseline: x35 (GB/GBC tested)
 
 Firmware `retro-go_1.46-classic-x35_esp32-3248s035r.img` was built with ESP-IDF 5.2.6, flashed to the modified board, and tested by the user. Confirmed so far:
@@ -100,7 +237,7 @@ Firmware `retro-go_1.46-classic-x35_esp32-3248s035r.img` was built with ESP-IDF 
 
 Bluetooth, wired and touch input currently combine into Player 1; separate-player multiplayer is not implemented. Networking remains compiled in but is not recorded as runtime-tested; Doom is omitted to fit 4MB flash. A radio-calibration NVS write warning (`0x1105`, not enough space) remains observed; no bonds were erased to suppress it. Other controller models and BLE modes are not verified.
 
-The sections below retain the chronological investigation, including earlier failures and superseded configurations. This baseline summary and the x35 result describe the current verified state.
+The sections below retain the chronological investigation, including earlier failures and superseded configurations. x35 records the controller/GB-GBC baseline; the firmware-set and battery sections above describe the later x54/x55 changes.
 
 ## Hardware configuration
 
@@ -124,7 +261,11 @@ x39 applies the same pattern to the remaining retro-core emulators through targe
 - PC Engine and Lynx: the surface swap happens only after a successful submit, so a dropped frame is re-rendered into the same unowned surface. Lynx redraws now use the last complete frame.
 - SNES: single-buffered, so it only stops queuing frames while the display is busy. Its existing render-while-transfer behaviour is unchanged.
 
-Genesis, Doom and MSX are separate apps that are not part of this image and were not changed. x39 was flashed to COM10 with both app hashes verified and booted to the launcher without errors. Per-system gameplay testing is pending. Firmware: `retro-go_1.46-classic-x39_esp32-3248s035r.img`, CRC verified; retro-core is 1,496,032 bytes, leaving 11,296 bytes spare.- ESP32-WROOM-32, 4 MB flash, original ESP32 with Classic Bluetooth and BLE radio
+Genesis, Doom and MSX are separate apps that are not part of this image and were not changed. x39 was flashed to COM10 with both app hashes verified and booted to the launcher without errors. Per-system gameplay testing is pending. Firmware: `retro-go_1.46-classic-x39_esp32-3248s035r.img`, CRC verified; retro-core is 1,496,032 bytes, leaving 11,296 bytes spare.
+
+### Board configuration summary
+
+- ESP32-WROOM-32, 4 MB flash, original ESP32 with Classic Bluetooth and BLE radio
 - ESP-PSRAM64H, 8 MB fitted at U4; ESP-IDF maps the supported 4 MB addressable region
 - PSRAM is configured as 64-Mbit Quad SPI at 80 MHz, using the ESP32 defaults GPIO16 for CS and GPIO17 for clock
 - The PSRAM U4 pin 1 and pin 6 are isolated from the footprint pads and wired to GPIO16 and GPIO17; pin 1 has a 10 kOhm pull-up to 3.3 V
