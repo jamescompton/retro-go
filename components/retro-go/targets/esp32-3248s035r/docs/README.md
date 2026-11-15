@@ -1,6 +1,6 @@
 # ESP32-3248S035R
 
-Target for the resistive-touch Sunton ESP32-3248S035R (CYD) with the ESP-PSRAM64H U4 modification. This guide describes the user's modified USB-C board, not the NM-CYD-C5. See [hardware and wiring](#hardware-and-wiring) for the controller, required PSRAM modification, and this board revision's onboard battery charging and sensing.
+Target for the resistive-touch Sunton ESP32-3248S035R (CYD) with the ESP-PSRAM64H U4 modification. This guide describes the user's modified USB-C board, not the NM-CYD-C5. See [hardware and wiring](#hardware-and-wiring) for the controller, required PSRAM modification, and this board revision's onboard battery charging.
 
 ## Firmware sets (x54)
 
@@ -14,7 +14,7 @@ The board has **4 MB flash**, independently verified with `esptool flash_id`; it
 | `core` (legacy) | launcher + full retro-core | Original x51 Core grouping, including SNES |
 | `md` (legacy) | launcher + gwenesis | Original MD-only grouping |
 
-PCE is deliberately grouped with the 8-bit set. Bluetooth, PSRAM, networking, controls and emulator/audio tuning are retained; reorganizing the sets is not an audio-performance fix. In particular, MD retains the experimental x53 mixer described below. Sound options remain user-controlled. The x54 8-bit set was flashed and booted; x55 is its installed battery-sensing update. The x54 16-bit and Doom sets were built but have not been runtime-tested.
+PCE is deliberately grouped with the 8-bit set. Bluetooth, PSRAM, networking, controls and emulator/audio tuning are retained; reorganizing the sets is not an audio-performance fix. In particular, MD retains the experimental x53 mixer described below. Sound options remain user-controlled. The x54 8-bit set was flashed and booted. Battery-voltage reading is disabled in the current target source. The x54 16-bit and Doom sets were built but have not been runtime-tested.
 
 Persistent images in the repository root are `retro-go_1.46-classic-x54-8bit_esp32-3248s035r.img`, `retro-go_1.46-classic-x54-16bit_esp32-3248s035r.img`, and `retro-go_1.46-classic-x54-doom_esp32-3248s035r.img`. `retro-go_1.46-classic-x54-profiles_esp32-3248s035r.zip` contains those images, per-set partition tables and exact app binaries, and a manifest of offsets, sizes and SHA-256 hashes. Older recovery images are preserved.
 
@@ -38,15 +38,13 @@ This target additionally tests scanline-batched synthesis instead of chip-access
 
 The approved app-only flash and boot were verified on the same board. Combined FM+PSG measured approximately 30-32 simulated FPS, 0.52-0.54 seconds CPU emulation, 0.32-0.34 seconds synthesis, and 0.019 seconds mixing/output per second. Internal heap stayed near 91 KB. The user judged combined audio poor and reported a large improvement when disabling PSG. The capture contains only one complete subsequent FM-only timing interval (31 frames, 0.558 seconds CPU and 0.300 seconds synthesis), so it does not establish a sustained twofold speedup or a gain over x52. x53 is experimental, not a successful speed fix; x52 remains the fallback image. No automatic rollback or further flash was performed.
 
-### Battery indication and onboard charging
+### Onboard battery charging
 
-This USB-C board revision has a **BAT1 battery connector, onboard FM5324HJ1 power-management/charging IC, and a built-in battery-sense path**. The older MCU V1.1 schematic does not describe this revision. **An external charging module is not required and is not part of the recommended wiring.**
+This USB-C board revision has a **BAT1 battery connector and onboard FM5324HJ1 power-management/charging IC**. The older MCU V1.1 schematic does not describe this revision. An external charging module is not required for the documented board design.
 
 The user reports that the charging/power-management chip on their unit burned out. Treat that unit's onboard charge path as damaged: do not charge through it until the board has been inspected and repaired. This incident is specific to the user's unit; it does not change the documented onboard design or justify bypassing it with an unidentified parallel charger.
 
-The target's battery reader uses **P3 IO35 (GPIO35, ADC1 channel 7)**. The user's board has an existing sense route; previous unpowered checks measured about 1 kOhm from IO35 to the upper C24 pad and 545 Ohm to its lower pad. These resistance readings do not establish the loaded ADC scale. The x55 reader multiplies calibrated ADC millivolts by two, and reported 4.240 V while USB was connected; this has not been checked against a multimeter. Treat displayed voltage and the existing linear 3.50 V (0%) to 4.20 V (100%) estimate as uncalibrated, not as a fuel gauge or charging-status detector. **Do not add another divider to the board's existing sense route.**
-
-The x55 battery-reading change is preserved in the 8-bit firmware; the x54 profile images predate it. Do not infer charging state from the ADC reading.
+Battery-voltage sensing is **disabled in this target**. The firmware does not sample a battery-sense input or provide a battery-voltage/percentage reading; no GPIO sense wire or divider is part of this target's wiring instructions. Charging capability remains a board-level hardware feature and is separate from firmware battery telemetry.
 
 In an ESP-IDF 5.2 PowerShell environment, select one profile and use `all` so the target chooses the correct apps:
 
@@ -99,7 +97,7 @@ These are the current build connections, separate from the historical experiment
 
 ![Modified ESP32-3248S035R board with PSRAM at U4 and added wiring](photo-4-board-wiring.jpg)
 
-*User's board, 10 November 2026: BAT1 is at the upper left; the fitted eight-pin PSRAM and pull-up are beside the ESP32 module; controller and sense wiring run to the lower connector area. This is an as-built reference, not a pad-by-pad tracing image: glue, sleeving and crossing wires obscure some connections.*
+*User's board, 10 November 2026: BAT1 is at the upper left; the fitted eight-pin PSRAM and pull-up are beside the ESP32 module; controller wiring runs to the lower connector area. This is an as-built reference, not a pad-by-pad tracing image: glue, sleeving and crossing wires obscure some connections.*
 
 ### Wired controller: NULLLAB Mini-Joystick
 
@@ -119,7 +117,6 @@ flowchart LR
         G["CN1: GND"]
         D["P3 IO21 / CN1 IO21"]
         C["P3 IO22 / CN1 IO22"]
-        S["P3: IO35"]
     end
     subgraph Pad["NULLLAB Mini-Joystick: I2C 0x5A"]
         PV["VCC"]
@@ -131,7 +128,6 @@ flowchart LR
     G --- PG
     D --- PD
     C --- PC
-    S --- Sense["Optional battery sense only; not a controller signal"]
 ```
 
 The reference pinout lists **P3: GND / IO35 / IO22 / IO21** and **CN1: GND / IO22 / IO21 / 3V3**. Those are reference drawing sequences, not instructions to count from the left in the photos. Confirm the board's labels/orientation before connecting.
@@ -182,15 +178,15 @@ flowchart LR
 
 This is a logical wiring diagram, not a physical chip orientation drawing. Locate pin 1 using the package mark and footprint reference, and check isolation/shorts with all power removed before powering up. Keep the high-speed bodge connections short. Firmware selects Quad SPI PSRAM at 80 MHz, initializes it at boot and runs a memory test; missing PSRAM is not silently ignored. DMA audio buffers still use internal SRAM.
 
-### Onboard battery charging and power button
+### Onboard battery and power button
 
 ![Open enclosure showing the battery assembly, speaker and modified board](photo-5-enclosure-power.jpg)
 
 *User's open enclosure, 10 November 2026: two parallel-connected 3.7 V, 550 mAh cells below the speaker and the modified board below. A small add-on board is visible at upper right, but its identity and terminal routing are not established by this photo. It is not required by the 3248S035R's onboard charger; this image is not a charging-module wiring diagram.*
 
-The user's USB-C board revision charges the battery through its **onboard FM5324HJ1 power-management IC and BAT1 connector** and provides an onboard battery-sense path to the firmware's **P3 IO35 / ADC1 channel 7** input. No external charger or extra sense divider is needed for the documented board design. Use only the board's designated USB and BAT1 connections; do not parallel an unidentified charging module with the onboard circuit.
+The user's USB-C board revision charges the battery through its **onboard FM5324HJ1 power-management IC and BAT1 connector**. The user confirms two 3.7 V, 550 mAh cells connected in parallel (1S2P): **3.7 V nominal, 1100 mAh nominal combined capacity**, not 7.4 V. No separate charger module is included in the recommended wiring.
 
-The user confirms two 3.7 V, 550 mAh cells connected in parallel (1S2P): **3.7 V nominal, 1100 mAh nominal combined capacity**, not 7.4 V. The user also reports that **connecting USB turns off the battery-powered path on this particular board**, affecting normal power-button on/off behaviour while USB is connected. This is a report about this board revision, not a guarantee for every 3248S035 variant.
+The user also reports that **connecting USB turns off the battery-powered path on this particular board**, affecting normal power-button on/off behaviour while USB is connected. This is a report about this board revision, not a guarantee for every 3248S035 variant.
 
 The user's specific charging/power-management IC was reported burned out. Do not charge that unit through the onboard circuit until the fault has been inspected and repaired. No external bypass/charger wiring is prescribed here. The photo does not establish a safe alternative power path.
 
@@ -200,10 +196,7 @@ flowchart LR
     PMIC --> BAT["BAT1: 1S2P battery, 3.7 V nominal, 1100 mAh"]
     BAT --> PWR["Onboard battery power path and power button"]
     PWR --> BOARD["ESP32-3248S035R"]
-    BAT -. "existing board sense route; ADC scale uncalibrated" .-> ADC["P3 IO35 / ADC1_CH7"]
 ```
-
-The x55 firmware reads GPIO35 and applies a 2x ADC scale from the earlier resistor measurements. Because the board's loaded factory sense ratio has not been meter-verified, voltage and percentage remain estimates. Do not add a second divider or treat the icon as charge-state indication.
 
 ## Working baseline: x35 (GB/GBC tested)
 
